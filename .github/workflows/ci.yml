@@ -19,30 +19,34 @@ jobs:
   build:
     name: Build & test (unit · slice · arch · integration)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
 
       # GitHub-hosted Ubuntu runners ship with Docker, so Testcontainers ITs run here too.
+      # Docker Hub rate-limits anonymous pulls per IP, and shared runners share IPs. Testcontainers
+      # pulls Docker Hub images through Google's public mirror instead (same images, no credentials).
       - name: Verify
         run: ./mvnw -B -ntp verify
+        env:
+          TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
 
       - name: Publish test report
         if: always()
-        uses: mikepenz/action-junit-report@v5
+        uses: mikepenz/action-junit-report@v6
         with:
           report_paths: '**/target/{surefire,failsafe}-reports/TEST-*.xml'
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: jacoco
           path: '**/target/site/jacoco/'
@@ -55,9 +59,9 @@ jobs:
       run:
         working-directory: dashboard
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: dashboard/.nvmrc
           cache: npm
