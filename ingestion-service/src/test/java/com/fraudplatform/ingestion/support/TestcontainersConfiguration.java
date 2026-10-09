@@ -1,5 +1,6 @@
 package com.fraudplatform.ingestion.support;
 
+import com.fraudplatform.testing.Containers;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
@@ -16,12 +17,12 @@ public class TestcontainersConfiguration {
     @Bean
     @ServiceConnection
     KafkaContainer kafkaContainer() {
-        return new KafkaContainer("apache/kafka-native:4.1.0");
+        return Containers.kafka();
     }
 
     @Bean
     @ServiceConnection(name = "redis")
     GenericContainer<?> redisContainer() {
-        return RedisTestSupport.redisContainer();
+        return Containers.redis();
     }
 }

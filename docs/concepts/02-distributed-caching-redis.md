@@ -1,6 +1,6 @@
 # 02 · Distributed caching with Redis
 
-> **Status:** 📝 Planned: [Feature 005](../../specs/005-high-risk-account-cache/spec.md) (risk cache), [Feature 003](../../specs/003-rule-based-scoring/spec.md) (velocity windows)
+> **Status:** ✅ Sliding windows in [Feature 003](../../specs/003-rule-based-scoring/spec.md) ([`account_activity.lua`](../../scoring-service/src/main/resources/scripts/account_activity.lua)) · 📝 risk cache in [Feature 005](../../specs/005-high-risk-account-cache/spec.md)
 
 ## TL;DR
 An in-process cache is fast but private to one JVM, so N instances have N inconsistent copies. A **distributed cache** (Redis) is shared. Its cost is one network hop (~0.2–1 ms), but every instance sees the same "account X is high-risk" flag the moment it's set.

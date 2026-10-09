@@ -19,13 +19,19 @@ flowchart LR
 |---|------------------|---------|
 | ① | Client didn't get our `202` and retries | `Idempotency-Key` header → `SET idem:{key} NX EX 86400` → replay the original response ✅ *implemented* ([`RedisIdempotencyStore`](../../ingestion-service/src/main/java/com/fraudplatform/ingestion/infrastructure/redis/RedisIdempotencyStore.java)) |
 | ② | Producer retries after a lost ack | `enable.idempotence=true` (broker dedupes by PID + sequence) ✅ *implemented* |
-| ③ | Consumer crashed before committing the offset | Dedupe on `eventId` (`SET processed:{eventId} NX`) |
+| ③ | Consumer crashed before committing the offset | Skip if `processed:{eventId}` exists, and write the marker **after** the side effects. Activity windows are keyed by `eventId`, and the alert id is derived from the `eventId`. ✅ *implemented* ([`ScoreTransactionService`](../../scoring-service/src/main/java/com/fraudplatform/scoring/application/ScoreTransactionService.java)) |
 | ④ | Same batch re-inserted | `UNIQUE(transaction_id)` + `ON CONFLICT DO NOTHING` |
 
 ## Idempotency-key details (Stripe-style)
 - Store **a hash of the request body** with the key. The same key with a different body is client misuse, so return `422`.
 - Two concurrent requests with the same key: the first `SET NX` wins, and the other sees "in-flight" and returns `409`, or waits and replays the result.
 - TTL bounds storage (24h is typical).
+
+## Why the "processed" marker is written last
+| Order | Crash between steps | Result |
+|-------|---------------------|--------|
+| Mark → work | after the mark | Event is **lost** (at-most-once) ❌ |
+| Work → mark | after the work | Event is **re-processed**, which is harmless because the work is idempotent ✅ |
 
 ## Kafka transactions (EOS)
 Kafka's `transactional.id` + `read_committed` give exactly-once for **consume → process → produce within Kafka**. Once a side effect leaves Kafka (DB write, email), you are back to idempotent consumers. That's why we rely on idempotent handlers rather than Kafka transactions alone.

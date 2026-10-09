@@ -29,7 +29,7 @@ flowchart LR
 
 | Concept | Deep dive | Feature |
 |---------|-----------|---------|
-| Event-driven decoupling with Kafka | [01](docs/concepts/01-event-driven-kafka.md) | ✅ 001 · 003 |
+| Event-driven decoupling with Kafka | [01](docs/concepts/01-event-driven-kafka.md) | ✅ 001 · ✅ 003 |
 | Distributed caching with Redis | [02](docs/concepts/02-distributed-caching-redis.md) | 005 |
 | N+1 queries and composite indexing | [03](docs/concepts/03-n-plus-one-and-composite-indexing.md) | 004 · 007 |
 | JDBC batch processing | [04](docs/concepts/04-jdbc-batch-processing.md) | 004 |
@@ -62,7 +62,7 @@ flowchart LR
 | 000 | Project foundation | ✅ |
 | 001 | Transaction ingestion API → Kafka | ✅ |
 | 002 | Distributed rate limiting & idempotency | ✅ |
-| 003 | Rule-based scoring engine | 📝 |
+| 003 | Rule-based scoring engine | ✅ |
 | 004 | Persistence: JDBC batch, indexes | 📝 |
 | 005 | High-risk account cache | 📝 |
 | 006 | ML-assisted scoring | 📝 |
@@ -89,8 +89,9 @@ Details and dependency graph: [specs/README.md](specs/README.md)
 # 2. Start infrastructure
 docker compose -f infra/docker-compose.yml up -d
 
-# 3. Run the ingestion service
+# 3. Run the services (separate terminals)
 ./mvnw -pl ingestion-service spring-boot:run
+./mvnw -pl scoring-service spring-boot:run
 
 # 4. Submit a transaction
 curl -i -X POST localhost:8081/api/v1/transactions \
@@ -123,12 +124,14 @@ docker compose -f infra/docker-compose.yml --profile tools up -d kafka-ui
 
 ```
 ├── common/                 Shared Kafka event contracts (records only)
-├── ingestion-service/      REST → Kafka (Feature 001)
+├── test-support/           Shared Testcontainers images + Kafka/Redis test helpers
+├── ingestion-service/      REST → Kafka, rate limiting, idempotency (001, 002)
 │   └── src/main/java/…/ingestion/
 │       ├── api/            controllers, DTOs, ProblemDetail handler
 │       ├── application/    use cases + ports (framework-free)
 │       ├── domain/         pure business model
 │       └── infrastructure/ Kafka adapter, wiring, config
+├── scoring-service/        Kafka → rules → fraud.alerts.v1 (003)
 ├── infra/                  docker-compose for local infrastructure
 ├── docs/
 │   ├── constitution.md     engineering rules & Definition of Done

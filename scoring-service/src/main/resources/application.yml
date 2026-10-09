@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: scoring-service
+  threads:
+    virtual:
+      enabled: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 500ms
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: scoring
+      auto-offset-reset: earliest     # a new consumer group starts from the beginning: never skip transactions
+      max-poll-records: 500
+      isolation-level: read-committed
+      properties:
+        partition.assignment.strategy: org.apache.kafka.clients.consumer.CooperativeStickyAssignor  # incremental rebalances
+    listener:
+      concurrency: 3                  # consumer threads per instance; total across instances ≤ partitions
+      ack-mode: batch                 # commit after the whole poll batch was processed successfully
+    producer:
+      acks: all
+      compression-type: lz4
+      properties:
+        enable.idempotence: true
+        linger.ms: 5
+
+server:
+  port: 8082
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+fraud:
+  scoring:
+    rules:
+      high-amount-usd: 5000
+      usd-rates:
+        EUR: 1.08
+        GBP: 1.27
+        JPY: 0.0067
+        INR: 0.012
+      velocity-max-per-minute: 5
+      geo-velocity-window: 1h
+      high-risk-mccs: 7995, 6051, 4829, 6211   # gambling, quasi-cash, money transfer, securities/crypto brokers
+      card-testing-amount: 2.00
+      card-testing-min-count: 3

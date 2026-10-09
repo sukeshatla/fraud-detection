@@ -1,10 +1,11 @@
 package com.fraudplatform.ingestion.infrastructure.redis;
 
+import com.fraudplatform.testing.Containers;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fraudplatform.ingestion.application.IdempotencyRecord;
 import com.fraudplatform.ingestion.application.IngestionReceipt;
-import com.fraudplatform.ingestion.support.RedisTestSupport;
+import com.fraudplatform.testing.RedisTestSupport;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
@@ -29,7 +30,7 @@ import tools.jackson.databind.json.JsonMapper;
 class RedisIdempotencyStoreIT {
 
     @Container
-    static final GenericContainer<?> REDIS = RedisTestSupport.redisContainer();
+    static final GenericContainer<?> REDIS = Containers.redis();
 
     private static RedisIdempotencyStore store;
     private static StringRedisTemplate redis;

@@ -26,7 +26,7 @@ Features build on each other. Each one is a shippable vertical slice with its ow
 | 000 | [Project foundation](000-foundation/spec.md) | Monorepo, hexagonal architecture, ArchUnit, CI | ✅ Implemented |
 | 001 | [Transaction ingestion API](001-transaction-ingestion/spec.md) | Event-driven decoupling, Kafka producer semantics, validation, virtual threads | ✅ Implemented |
 | 002 | [Distributed rate limiting & idempotency](002-rate-limiting-idempotency/spec.md) | Token bucket in Redis + Lua, idempotency keys | ✅ Implemented |
-| 003 | [Rule-based scoring engine](003-rule-based-scoring/spec.md) | Kafka consumer groups, strategy pattern, sliding-window velocity in Redis | 📝 Spec |
+| 003 | [Rule-based scoring engine](003-rule-based-scoring/spec.md) | Kafka consumer groups, strategy pattern, sliding-window velocity in Redis | ✅ Implemented |
 | 004 | [Persistence & query performance](004-persistence-jdbc-batch/spec.md) | Flyway, JDBC batch processing, composite & partial indexes | 📝 Spec |
 | 005 | [High-risk account cache](005-high-risk-account-cache/spec.md) | Distributed caching, cache-aside, TTL jitter, stampede protection | 📝 Spec |
 | 006 | [ML-assisted scoring](006-ml-assisted-scoring/spec.md) | Feature engineering, logistic regression, score blending, Semaphore bulkhead | 📝 Spec |

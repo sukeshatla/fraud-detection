@@ -1,4 +1,4 @@
-package com.fraudplatform.ingestion.support;
+package com.fraudplatform.testing;
 
 import static org.awaitility.Awaitility.await;
 

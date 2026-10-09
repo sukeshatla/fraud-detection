@@ -5,7 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fraudplatform.contracts.EventHeaders;
 import com.fraudplatform.contracts.Topics;
 import com.fraudplatform.contracts.events.TransactionReceivedEvent;
-import com.fraudplatform.ingestion.support.KafkaTestConsumer;
+import com.fraudplatform.testing.KafkaTestConsumer;
 import com.fraudplatform.ingestion.support.IntegrationTest;
 import com.fraudplatform.ingestion.support.TransactionJson;
 import java.nio.charset.StandardCharsets;

@@ -13,7 +13,9 @@
 
     <modules>
         <module>common</module>
+        <module>test-support</module>
         <module>ingestion-service</module>
+        <module>scoring-service</module>
     </modules>
 
     <properties>
@@ -45,6 +47,11 @@
             <dependency>
                 <groupId>com.fraudplatform</groupId>
                 <artifactId>common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fraudplatform</groupId>
+                <artifactId>test-support</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

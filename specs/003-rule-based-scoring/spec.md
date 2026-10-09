@@ -2,7 +2,7 @@
 
 | Field    | Value |
 |----------|-------|
-| Status   | Spec |
+| Status   | Implemented |
 | Depends  | 001 |
 | Concepts | [Event-driven decoupling](../../docs/concepts/01-event-driven-kafka.md), [Idempotency](../../docs/concepts/12-idempotency-and-exactly-once.md), [Distributed caching](../../docs/concepts/02-distributed-caching-redis.md) |
 
@@ -23,7 +23,7 @@ Known fraud patterns (card testing, account takeover, geographic impossibility) 
 | AC-003-05 | **HighRiskMccRule:** MCC in the high-risk list (e.g. 7995 gambling, 6051 quasi-cash) → hit, weight 20. |
 | AC-003-06 | **CardTestingRule:** 3 or more transactions under 2.00 within 5 min → hit, weight 45. |
 | AC-003-07 | The final rule score is `min(100, Σ weights)`. Decision: < 40 `APPROVE`, 40–74 `REVIEW`, ≥ 75 `DECLINE`. |
-| AC-003-08 | **Given** the same `eventId` is delivered twice, **when** consumed, **then** it is scored once (dedupe on `processed:{eventId}` via `SET NX`). |
+| AC-003-08 | **Given** the same `eventId` is delivered twice, **when** consumed, **then** it is scored once. The `processed:{eventId}` marker is written **after** the side effects (writing it first would turn a crash into silent data loss, i.e. at-most-once), and every side effect is itself idempotent. |
 | AC-003-09 | **Given** a message that cannot be deserialised, **when** consumed, **then** it is sent to `transactions.received.v1.DLT` after zero retries (poison pill), and the partition keeps moving. |
 | AC-003-10 | **Given** a score ≥ 40, **when** scoring completes, **then** a `FraudAlertEvent` is published to `fraud.alerts.v1` keyed by `accountId`. |
 
