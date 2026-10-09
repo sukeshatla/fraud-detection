@@ -36,13 +36,14 @@ flowchart LR
 | Two-layer concurrent-write protection | [05](docs/concepts/05-two-layer-concurrent-write-protection.md) | 007 |
 | Distributed rate limiting | [06](docs/concepts/06-distributed-rate-limiting.md) | ✅ 002 |
 | JDK 21 virtual threads | [07](docs/concepts/07-virtual-threads.md) | ✅ 001 · 009 |
-| Threads, semaphores, locks, CompletableFuture | [08](docs/concepts/08-concurrency-primitives.md) | 006 · 009 |
+| Threads, semaphores, locks, CompletableFuture | [08](docs/concepts/08-concurrency-primitives.md) | ✅ 005 · 006 · 009 |
 | Load testing with Gatling | [09](docs/concepts/09-load-testing-gatling.md) | 013 |
 | CI/CD pipeline | [10](docs/concepts/10-ci-cd-pipeline.md) | ✅ 000 · 014 |
 | Load balancing | [11](docs/concepts/11-load-balancing.md) | 011 |
 | Idempotency & exactly-once | [12](docs/concepts/12-idempotency-and-exactly-once.md) | 002 · 003 · 004 |
 | Resilience: retries, DLT, circuit breaker, outbox | [13](docs/concepts/13-resilience-patterns.md) | 010 |
 | Observability | [14](docs/concepts/14-observability.md) | 012 |
+| ML in production: feature parity, blending, degradation | [15](docs/concepts/15-ml-in-production.md) | ✅ 006 |
 
 ## How this repo is built
 
@@ -65,7 +66,7 @@ flowchart LR
 | 003 | Rule-based scoring engine | ✅ |
 | 004 | Persistence: JDBC batch, indexes | ✅ |
 | 005 | High-risk account cache | ✅ |
-| 006 | ML-assisted scoring | 📝 |
+| 006 | ML-assisted scoring | ✅ |
 | 007 | Alert management API | 📝 |
 | 008 | React dashboard | 📝 |
 | 009 | Concurrency deep dive | 📝 |
@@ -132,6 +133,7 @@ docker compose -f infra/docker-compose.yml --profile tools up -d kafka-ui
 │       ├── domain/         pure business model
 │       └── infrastructure/ Kafka adapter, wiring, config
 ├── scoring-service/        Kafka → rules → Postgres (JDBC batch) → fraud.alerts.v1, risk cache (003–005)
+├── ml/                     Model training (Python): synthetic data → logistic regression → JSON (006)
 ├── infra/                  docker-compose for local infrastructure
 ├── docs/
 │   ├── constitution.md     engineering rules & Definition of Done

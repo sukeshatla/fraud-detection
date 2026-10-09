@@ -1,0 +1,191 @@
+{
+  "modelVersion": "lr-v1",
+  "algorithm": "logistic-regression (IRLS, L2=0.001)",
+  "features": [
+    "log_amount_usd",
+    "hour_sin",
+    "hour_cos",
+    "high_risk_mcc",
+    "card_not_present",
+    "log_tx_count_1h",
+    "log_tx_count_24h",
+    "country_changed",
+    "log_small_tx_5m"
+  ],
+  "means": [
+    4.144850058728313,
+    -0.26677704932455315,
+    -0.4738749955072392,
+    0.033166666666666664,
+    0.37377083333333333,
+    0.8842645071742699,
+    1.6635844091835912,
+    0.034666666666666665,
+    0.05886840825498443
+  ],
+  "stds": [
+    1.1575776067196084,
+    0.6334396064759503,
+    0.5504786640136747,
+    0.17907160268693195,
+    0.4838038832859035,
+    0.29413552216517963,
+    0.39200317985463434,
+    0.1829341107855646,
+    0.2284170148498522
+  ],
+  "weights": [
+    0.3870414309027875,
+    0.31901815769472625,
+    0.4037246025901176,
+    0.2940003854573737,
+    0.4340592530653145,
+    0.8297592791337675,
+    0.8828366883089677,
+    0.31058214787776434,
+    0.6029911489636375
+  ],
+  "intercept": -4.617750445444408,
+  "metrics": {
+    "auc": 0.9134,
+    "precision_at_0_5": 0.9641,
+    "recall_at_0_5": 0.716,
+    "train_size": 48000,
+    "test_size": 12000,
+    "fraud_rate": 0.0595
+  },
+  "referenceCases": [
+    {
+      "amountUsd": 42.0,
+      "hourUtc": 14.0,
+      "highRiskMcc": false,
+      "cardNotPresent": false,
+      "txCount1h": 1,
+      "txCount24h": 3,
+      "countryChanged": false,
+      "smallTx5m": 0,
+      "expectedFeatures": [
+        3.7612001156935624,
+        -0.4999999999999998,
+        -0.8660254037844388,
+        0.0,
+        0.0,
+        0.6931471805599453,
+        1.3862943611198906,
+        0.0,
+        0.0
+      ],
+      "expectedProbability": 0.0009880620609150638
+    },
+    {
+      "amountUsd": 1.0,
+      "hourUtc": 3.0,
+      "highRiskMcc": false,
+      "cardNotPresent": true,
+      "txCount1h": 5,
+      "txCount24h": 7,
+      "countryChanged": false,
+      "smallTx5m": 3,
+      "expectedFeatures": [
+        0.6931471805599453,
+        0.7071067811865475,
+        0.7071067811865476,
+        0.0,
+        1.0,
+        1.791759469228055,
+        2.0794415416798357,
+        0.0,
+        1.3862943611198906
+      ],
+      "expectedProbability": 0.9540930745595092
+    },
+    {
+      "amountUsd": 7500.0,
+      "hourUtc": 2.5,
+      "highRiskMcc": true,
+      "cardNotPresent": true,
+      "txCount1h": 2,
+      "txCount24h": 4,
+      "countryChanged": true,
+      "smallTx5m": 0,
+      "expectedFeatures": [
+        8.922791623969637,
+        0.6087614290087207,
+        0.7933533402912352,
+        1.0,
+        1.0,
+        1.0986122886681098,
+        1.6094379124341003,
+        1.0,
+        0.0
+      ],
+      "expectedProbability": 0.9216918914598776
+    },
+    {
+      "amountUsd": 250.0,
+      "hourUtc": 20.0,
+      "highRiskMcc": false,
+      "cardNotPresent": true,
+      "txCount1h": 1,
+      "txCount24h": 1,
+      "countryChanged": false,
+      "smallTx5m": 0,
+      "expectedFeatures": [
+        5.5254529391317835,
+        -0.8660254037844386,
+        0.5000000000000001,
+        0.0,
+        1.0,
+        0.6931471805599453,
+        0.6931471805599453,
+        0.0,
+        0.0
+      ],
+      "expectedProbability": 0.002075973157192454
+    },
+    {
+      "amountUsd": 9000.0,
+      "hourUtc": 11.0,
+      "highRiskMcc": true,
+      "cardNotPresent": false,
+      "txCount1h": 8,
+      "txCount24h": 20,
+      "countryChanged": true,
+      "smallTx5m": 4,
+      "expectedFeatures": [
+        9.105090961257085,
+        0.258819045102521,
+        -0.9659258262890682,
+        1.0,
+        0.0,
+        2.1972245773362196,
+        3.044522437723423,
+        1.0,
+        1.6094379124341003
+      ],
+      "expectedProbability": 0.9999783980291242
+    },
+    {
+      "amountUsd": 0.75,
+      "hourUtc": 23.75,
+      "highRiskMcc": false,
+      "cardNotPresent": true,
+      "txCount1h": 3,
+      "txCount24h": 3,
+      "countryChanged": false,
+      "smallTx5m": 2,
+      "expectedFeatures": [
+        0.5596157879354227,
+        -0.0654031292301428,
+        0.9978589232386035,
+        0.0,
+        1.0,
+        1.3862943611198906,
+        1.3862943611198906,
+        0.0,
+        1.0986122886681098
+      ],
+      "expectedProbability": 0.34284706314669305
+    }
+  ]
+}

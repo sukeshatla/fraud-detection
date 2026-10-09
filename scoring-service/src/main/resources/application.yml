@@ -79,3 +79,9 @@ fraud:
       jitter: 0.10
       lock-ttl: 2s
       lock-wait: 300ms
+    ml:
+      enabled: true
+      model: classpath:ml/model-v1.json   # produced by ml/train.py
+      rule-weight: 0.6                    # final = max(rule, 0.6·rule + 0.4·100p)
+      max-concurrent: 32                  # Semaphore bulkhead permits
+      acquire-timeout: 20ms               # then fall back to rules-only

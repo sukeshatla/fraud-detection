@@ -23,6 +23,8 @@ import com.fraudplatform.scoring.domain.RuleHit;
 import com.fraudplatform.scoring.domain.HighRiskAccount;
 import com.fraudplatform.scoring.domain.RiskStatus;
 import com.fraudplatform.scoring.domain.Transaction;
+import com.fraudplatform.scoring.domain.ml.MlPrediction;
+import com.fraudplatform.scoring.domain.ml.ScoreBlender;
 import com.fraudplatform.scoring.domain.rules.KnownHighRiskAccountRule;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -59,6 +61,9 @@ class ScoreTransactionServiceTest {
 
     private final FakeHighRiskAccountCache riskCache = new FakeHighRiskAccountCache();
 
+    /** Default: model unavailable (rules only); individual tests stub a prediction. */
+    private MlScorer ml = (tx, activity) -> Optional.empty();
+
     private ScoreTransactionService service;
 
     /** Test rule: amounts ≥ 1000 score 80 (DECLINE), everything else 0 (APPROVE). */
@@ -80,7 +85,8 @@ class ScoreTransactionServiceTest {
     @BeforeEach
     void setUp() {
         service = new ScoreTransactionService(processed, activityStore,
-                new RuleEngine(List.of(BIG_IS_BAD, new KnownHighRiskAccountRule())), repository, riskCache, alerts,
+                new RuleEngine(List.of(BIG_IS_BAD, new KnownHighRiskAccountRule())), repository, riskCache, ml,
+                new ScoreBlender(0.6), alerts,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         lenient().when(activityStore.recordAndGet(any())).thenReturn(AccountActivity.none());
     }
@@ -191,5 +197,27 @@ class ScoreTransactionServiceTest {
 
         assertThatThrownBy(() -> service.scoreBatch(List.of(risky))).isInstanceOf(IllegalStateException.class);
         assertThat(riskCache.get(risky.accountId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("AC-006-03: the model escalates a rule-clean transaction; probability + version are kept")
+    void modelEscalatesRuleCleanTransaction() {
+        ml = (tx, activity) -> Optional.of(new MlPrediction(0.97, "lr-test"));
+        setUp();
+
+        RiskAssessment assessment = service.scoreBatch(List.of(clean)).getFirst();
+
+        assertThat(assessment.ruleScore()).isZero();
+        assertThat(assessment.riskScore()).isEqualTo(39); // round(0.4 · 97)
+        assertThat(assessment.mlPrediction()).contains(new MlPrediction(0.97, "lr-test"));
+    }
+
+    @Test
+    @DisplayName("AC-006-03: the model never dilutes a rule decision")
+    void modelNeverDilutesRules() {
+        ml = (tx, activity) -> Optional.of(new MlPrediction(0.01, "lr-test"));
+        setUp();
+
+        assertThat(service.scoreBatch(List.of(risky)).getFirst().decision()).isEqualTo(Decision.DECLINE);
     }
 }

@@ -7,6 +7,7 @@ import com.fraudplatform.scoring.domain.RiskStatus;
 import com.fraudplatform.scoring.domain.RuleHit;
 import com.fraudplatform.scoring.domain.RuleEngine;
 import com.fraudplatform.scoring.domain.Transaction;
+import com.fraudplatform.scoring.domain.ml.ScoreBlender;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -22,7 +23,8 @@ import java.util.stream.Collectors;
  * <ol>
  *   <li>drop events already processed, and duplicates within the batch;
  *   <li>look up which accounts are flagged high-risk (one pipelined cache round trip);
- *   <li>record activity + evaluate rules per transaction; a DECLINE flags the account for the
+ *   <li>record activity, evaluate rules, ask the model (bulkheaded; rules-only if unavailable)
+ *       and blend; a DECLINE flags the account for the
  *       <i>rest of this batch</i> too;
  *   <li>persist <b>all</b> assessments in one DB transaction (JDBC batch);
  *   <li>flag newly declined accounts in the cache (after the commit: the cache only reflects
@@ -44,6 +46,8 @@ public class ScoreTransactionService {
     private final RuleEngine ruleEngine;
     private final AssessmentRepository repository;
     private final HighRiskAccountCache riskCache;
+    private final MlScorer mlScorer;
+    private final ScoreBlender blender;
     private final AlertPublisher alerts;
     private final Clock clock;
 
@@ -53,6 +57,8 @@ public class ScoreTransactionService {
             RuleEngine ruleEngine,
             AssessmentRepository repository,
             HighRiskAccountCache riskCache,
+            MlScorer mlScorer,
+            ScoreBlender blender,
             AlertPublisher alerts,
             Clock clock) {
         this.processed = processed;
@@ -60,6 +66,8 @@ public class ScoreTransactionService {
         this.ruleEngine = ruleEngine;
         this.repository = repository;
         this.riskCache = riskCache;
+        this.mlScorer = mlScorer;
+        this.blender = blender;
         this.alerts = alerts;
         this.clock = clock;
     }
@@ -93,7 +101,8 @@ public class ScoreTransactionService {
 
     private RiskAssessment assess(Transaction tx, boolean knownHighRisk) {
         var activity = activityStore.recordAndGet(tx).withKnownHighRisk(knownHighRisk);
-        return RiskAssessment.fromRules(tx, ruleEngine.evaluate(tx, activity), clock.instant());
+        return RiskAssessment.of(tx, ruleEngine.evaluate(tx, activity), mlScorer.score(tx, activity), blender,
+                clock.instant());
     }
 
     private static HighRiskAccount toHighRisk(RiskAssessment a) {
