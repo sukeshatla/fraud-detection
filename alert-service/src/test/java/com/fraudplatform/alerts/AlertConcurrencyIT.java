@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fraudplatform.alerts.application.AlertLock;
 import com.fraudplatform.alerts.application.AlertRepository;
-import com.fraudplatform.alerts.application.AlertResolutionPublisher;
 import com.fraudplatform.alerts.application.ReviewAlertService;
 import com.fraudplatform.alerts.application.StaleAlertException;
 import com.fraudplatform.alerts.domain.AlertStatus;
@@ -41,8 +40,6 @@ class AlertConcurrencyIT {
     @Autowired
     private AlertRepository repository;
 
-    @Autowired
-    private AlertResolutionPublisher publisher;
 
     @Autowired
     private com.fraudplatform.alerts.application.AlertChangeBus changes;
@@ -72,7 +69,7 @@ class AlertConcurrencyIT {
     void layerTwoHoldsWithoutLock() throws Exception {
         UUID id = newOpenAlert();
         AlertLock noLock = alertId -> Optional.of(() -> {}); // simulates an expired / failed Redis lease
-        ReviewAlertService unguarded = new ReviewAlertService(repository, noLock, publisher, changes, Clock.systemUTC());
+        ReviewAlertService unguarded = new ReviewAlertService(repository, noLock, changes, Clock.systemUTC());
 
         List<String> outcomes = race(50, () -> {
             try {

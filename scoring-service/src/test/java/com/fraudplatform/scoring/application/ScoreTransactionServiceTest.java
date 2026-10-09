@@ -56,8 +56,6 @@ class ScoreTransactionServiceTest {
     @Mock
     private AssessmentRepository repository;
 
-    @Mock
-    private AlertPublisher alerts;
 
     private final FakeHighRiskAccountCache riskCache = new FakeHighRiskAccountCache();
 
@@ -86,29 +84,28 @@ class ScoreTransactionServiceTest {
     void setUp() {
         service = new ScoreTransactionService(processed, activityStore,
                 new RuleEngine(List.of(BIG_IS_BAD, new KnownHighRiskAccountRule())), repository, riskCache, ml,
-                new ScoreBlender(0.6), alerts,
+                new ScoreBlender(0.6),
                 Clock.fixed(NOW, ZoneOffset.UTC), 8);
         lenient().when(activityStore.recordAndGet(any())).thenReturn(AccountActivity.none());
     }
 
     @Test
-    @DisplayName("AC-004-02: the whole batch is persisted with ONE repository call")
-    void persistsBatchOnce() {
+    @DisplayName("AC-004-02 / AC-010-04: the batch AND its alerts are written with ONE repository call (one transaction)")
+    void persistsBatchAndAlertsAtomically() {
         List<RiskAssessment> result = service.scoreBatch(List.of(risky, clean));
 
         assertThat(result).extracting(RiskAssessment::decision).containsExactly(Decision.DECLINE, Decision.APPROVE);
-        verify(repository, times(1)).saveAll(result);
+        verify(repository, times(1)).saveAll(result, List.of(result.getFirst()));
     }
 
     @Test
-    @DisplayName("AC-003-10: only REVIEW/DECLINE assessments raise alerts")
+    @DisplayName("AC-003-10: only REVIEW/DECLINE assessments are enqueued as alerts")
     void alertsOnlyForRisky() {
         service.scoreBatch(List.of(risky, clean));
 
-        ArgumentCaptor<RiskAssessment> captor = ArgumentCaptor.forClass(RiskAssessment.class);
-        verify(alerts).publish(captor.capture());
-        assertThat(captor.getValue().transaction()).isEqualTo(risky);
-        assertThat(captor.getValue().scoredAt()).isEqualTo(NOW);
+        List<RiskAssessment> alerts = capturedAlerts();
+        assertThat(alerts).extracting(RiskAssessment::transaction).containsExactly(risky);
+        assertThat(alerts.getFirst().scoredAt()).isEqualTo(NOW);
     }
 
     @Test
@@ -117,41 +114,30 @@ class ScoreTransactionServiceTest {
         given(processed.isProcessed(risky.eventId())).willReturn(true);
 
         assertThat(service.scoreBatch(List.of(risky))).isEmpty();
-        verifyNoInteractions(activityStore, repository, alerts);
+        verifyNoInteractions(activityStore, repository);
     }
 
     @Test
     @DisplayName("AC-003-08: the same eventId twice in one batch is scored once")
     void dedupesWithinBatch() {
         assertThat(service.scoreBatch(List.of(risky, risky))).hasSize(1);
-        verify(alerts, times(1)).publish(any());
+        assertThat(capturedAlerts()).hasSize(1);
     }
 
     @Test
-    @DisplayName("Order: persist → alert → mark processed (at-least-once, idempotent replays)")
+    @DisplayName("Order: persist (incl. outbox) → mark processed (at-least-once, idempotent replays)")
     void ordering() {
         service.scoreBatch(List.of(risky));
 
-        InOrder order = inOrder(repository, alerts, processed);
-        order.verify(repository).saveAll(anyList());
-        order.verify(alerts).publish(any());
+        InOrder order = inOrder(repository, processed);
+        order.verify(repository).saveAll(anyList(), anyList());
         order.verify(processed).markProcessed(risky.eventId());
     }
 
     @Test
-    @DisplayName("DB failure → no alerts, nothing marked; the whole poll is redelivered")
+    @DisplayName("DB failure → no assessment and no alert (same transaction), nothing marked; the poll is redelivered")
     void dbFailureStopsTheBatch() {
-        doThrow(new IllegalStateException("db down")).when(repository).saveAll(anyList());
-
-        assertThatThrownBy(() -> service.scoreBatch(List.of(risky))).isInstanceOf(IllegalStateException.class);
-        verify(alerts, never()).publish(any());
-        verify(processed, never()).markProcessed(any());
-    }
-
-    @Test
-    @DisplayName("Alert failure → events not marked processed, so redelivery retries them")
-    void alertFailureLeavesEventsUnmarked() {
-        doThrow(new IllegalStateException("kafka down")).when(alerts).publish(any());
+        doThrow(new IllegalStateException("db down")).when(repository).saveAll(anyList(), anyList());
 
         assertThatThrownBy(() -> service.scoreBatch(List.of(risky))).isInstanceOf(IllegalStateException.class);
         verify(processed, never()).markProcessed(any());
@@ -193,7 +179,7 @@ class ScoreTransactionServiceTest {
     @Test
     @DisplayName("AC-005-01: DB failure → the cache is NOT flagged (cache reflects committed state only)")
     void noCacheWriteWhenPersistFails() {
-        doThrow(new IllegalStateException("db down")).when(repository).saveAll(anyList());
+        doThrow(new IllegalStateException("db down")).when(repository).saveAll(anyList(), anyList());
 
         assertThatThrownBy(() -> service.scoreBatch(List.of(risky))).isInstanceOf(IllegalStateException.class);
         assertThat(riskCache.get(risky.accountId())).isEmpty();
@@ -219,5 +205,12 @@ class ScoreTransactionServiceTest {
         setUp();
 
         assertThat(service.scoreBatch(List.of(risky)).getFirst().decision()).isEqualTo(Decision.DECLINE);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<RiskAssessment> capturedAlerts() {
+        ArgumentCaptor<List<RiskAssessment>> alerts = ArgumentCaptor.forClass(List.class);
+        verify(repository).saveAll(anyList(), alerts.capture());
+        return alerts.getValue();
     }
 }

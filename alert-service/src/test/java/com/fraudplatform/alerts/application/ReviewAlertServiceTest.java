@@ -37,9 +37,6 @@ class ReviewAlertServiceTest {
     private AlertRepository repository;
 
     @Mock
-    private AlertResolutionPublisher publisher;
-
-    @Mock
     private AlertChangeBus changes;
 
     private final AtomicBoolean lockReleased = new AtomicBoolean();
@@ -48,7 +45,7 @@ class ReviewAlertServiceTest {
     private final AlertLock lock = alertId -> lockAvailable ? Optional.of(() -> lockReleased.set(true)) : Optional.empty();
 
     private ReviewAlertService service() {
-        return new ReviewAlertService(repository, lock, publisher, changes, Clock.fixed(NOW, ZoneOffset.UTC));
+        return new ReviewAlertService(repository, lock, changes, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -57,7 +54,7 @@ class ReviewAlertServiceTest {
         lockAvailable = false;
 
         assertThatThrownBy(() -> service().review(ID, UNDER_REVIEW, 0, "analyst-1")).isInstanceOf(AlertLockedException.class);
-        verifyNoInteractions(repository, publisher, changes);
+        verifyNoInteractions(repository, changes);
     }
 
     @Test
@@ -67,7 +64,7 @@ class ReviewAlertServiceTest {
 
         assertThatThrownBy(() -> service().review(ID, CONFIRMED_FRAUD, 3, "analyst-1"))
                 .isInstanceOfSatisfying(StaleAlertException.class, e -> assertThat(e.current().version()).isEqualTo(4));
-        verify(repository, never()).transition(any(), anyLong(), any(), any(), any());
+        verify(repository, never()).transition(any(), anyLong(), any(), any(), any(), any());
         assertThat(lockReleased).isTrue();
     }
 
@@ -93,34 +90,30 @@ class ReviewAlertServiceTest {
     @DisplayName("AC-007-04/08: valid transition goes through the repository (version-checked + audited); not terminal → no event")
     void startReview() {
         given(repository.findById(ID)).willReturn(Optional.of(alert(ID, OPEN, 0)));
-        given(repository.transition(ID, 0, UNDER_REVIEW, "analyst-1", NOW)).willReturn(alert(ID, UNDER_REVIEW, 1));
+        given(repository.transition(ID, 0, UNDER_REVIEW, "analyst-1", NOW, Optional.empty()))
+                .willReturn(alert(ID, UNDER_REVIEW, 1));
 
         assertThat(service().review(ID, UNDER_REVIEW, 0, "analyst-1").version()).isEqualTo(1);
-        verifyNoInteractions(publisher);
         verify(changes).publish(new AlertChange(AlertChange.Type.UPDATED, alert(ID, UNDER_REVIEW, 1)));
         assertThat(lockReleased).isTrue();
     }
 
     @Test
-    @DisplayName("AC-007-09: resolving publishes AlertResolvedEvent after the transition committed")
-    void resolutionIsPublished() {
+    @DisplayName("AC-007-09 / AC-010-04: resolving enqueues AlertResolvedEvent in the SAME transaction as the status change")
+    void resolutionIsEnqueuedAtomically() {
         given(repository.findById(ID)).willReturn(Optional.of(alert(ID, UNDER_REVIEW, 1)));
-        given(repository.transition(ID, 1, FALSE_POSITIVE, "analyst-1", NOW)).willReturn(alert(ID, FALSE_POSITIVE, 2));
+        AlertResolution expected = new AlertResolution(ID, "txn-" + ID, "acc-1001", FALSE_POSITIVE, "analyst-1", NOW);
+        given(repository.transition(ID, 1, FALSE_POSITIVE, "analyst-1", NOW, Optional.of(expected)))
+                .willReturn(alert(ID, FALSE_POSITIVE, 2));
 
-        service().review(ID, FALSE_POSITIVE, 1, "analyst-1");
-
-        ArgumentCaptor<AlertResolution> captor = ArgumentCaptor.forClass(AlertResolution.class);
-        verify(publisher).publish(captor.capture());
-        assertThat(captor.getValue().resolution()).isEqualTo(FALSE_POSITIVE);
-        assertThat(captor.getValue().accountId()).isEqualTo("acc-1001");
-        assertThat(captor.getValue().resolvedBy()).isEqualTo("analyst-1");
+        assertThat(service().review(ID, FALSE_POSITIVE, 1, "analyst-1").status()).isEqualTo(FALSE_POSITIVE);
     }
 
     @Test
     @DisplayName("AC-007-06: a concurrent writer wins between our read and our write → Stale (from the repository)")
     void concurrentWriterDetectedAtWrite() {
         given(repository.findById(ID)).willReturn(Optional.of(alert(ID, OPEN, 0)));
-        given(repository.transition(ID, 0, UNDER_REVIEW, "analyst-1", NOW))
+        given(repository.transition(ID, 0, UNDER_REVIEW, "analyst-1", NOW, Optional.empty()))
                 .willThrow(new StaleAlertException(alert(ID, UNDER_REVIEW, 1)));
 
         assertThatThrownBy(() -> service().review(ID, UNDER_REVIEW, 0, "analyst-1")).isInstanceOf(StaleAlertException.class);

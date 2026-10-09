@@ -29,8 +29,8 @@ class AlertStatsIT {
         UUID dismissed = UUID.randomUUID();
         repository.insertIfAbsent(newAlert(UUID.randomUUID(), "txn-" + UUID.randomUUID(), "acc", Instant.now()));
         repository.insertIfAbsent(newAlert(dismissed, "txn-" + dismissed, "acc", Instant.now()));
-        repository.transition(dismissed, 0, AlertStatus.UNDER_REVIEW, "a", Instant.now());
-        repository.transition(dismissed, 1, AlertStatus.FALSE_POSITIVE, "a", Instant.now());
+        repository.transition(dismissed, 0, AlertStatus.UNDER_REVIEW, "a", Instant.now(), java.util.Optional.empty());
+        repository.transition(dismissed, 1, AlertStatus.FALSE_POSITIVE, "a", Instant.now(), java.util.Optional.empty());
 
         AlertStats after = repository.stats(since);
         assertThat(after.openBySeverity().get(Severity.HIGH)).isEqualTo(before.openBySeverity().get(Severity.HIGH) + 1);

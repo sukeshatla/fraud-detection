@@ -36,10 +36,10 @@ import java.util.stream.Collectors;
  *       <b>Different accounts run in parallel on virtual threads; one account's transactions run
  *       sequentially, in order</b> (velocity windows depend on it), the same guarantee Kafka
  *       partitions give across consumers, applied inside a batch;
- *   <li>persist <b>all</b> assessments in one DB transaction (JDBC batch);
+ *   <li>persist <b>all</b> assessments <b>and</b> enqueue the alerts (transactional outbox) in one DB
+ *       transaction: an alert can't be lost or announced for an assessment that didn't commit;
  *   <li>flag newly declined accounts in the cache (after the commit: the cache only reflects
  *       committed state);
- *   <li>publish alerts for REVIEW/DECLINE;
  *   <li>mark events processed.
  * </ol>
  *
@@ -58,7 +58,6 @@ public class ScoreTransactionService {
     private final HighRiskAccountCache riskCache;
     private final MlScorer mlScorer;
     private final ScoreBlender blender;
-    private final AlertPublisher alerts;
     private final Clock clock;
     private final int maxConcurrentAccounts;
 
@@ -70,7 +69,6 @@ public class ScoreTransactionService {
             HighRiskAccountCache riskCache,
             MlScorer mlScorer,
             ScoreBlender blender,
-            AlertPublisher alerts,
             Clock clock,
             int maxConcurrentAccounts) {
         this.processed = processed;
@@ -80,7 +78,6 @@ public class ScoreTransactionService {
         this.riskCache = riskCache;
         this.mlScorer = mlScorer;
         this.blender = blender;
-        this.alerts = alerts;
         this.clock = clock;
         this.maxConcurrentAccounts = maxConcurrentAccounts;
     }
@@ -109,11 +106,10 @@ public class ScoreTransactionService {
         });
         List<RiskAssessment> assessments = fresh.stream().map(tx -> byEvent.get(tx.eventId())).toList();
 
-        repository.saveAll(assessments);
+        repository.saveAll(assessments, assessments.stream().filter(RiskAssessment::raisesAlert).toList());
         assessments.stream()
                 .filter(a -> a.decision() == Decision.DECLINE)
                 .forEach(a -> riskCache.put(new RiskStatus.Flagged(toHighRisk(a))));
-        assessments.stream().filter(RiskAssessment::raisesAlert).forEach(alerts::publish);
         fresh.forEach(tx -> processed.markProcessed(tx.eventId()));
         return assessments;
     }

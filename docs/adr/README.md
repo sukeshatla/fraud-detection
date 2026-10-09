@@ -10,3 +10,4 @@ We record significant decisions using [Michael Nygard's format](https://cognitec
 | 0004 | [Java 21 + Spring Boot 4 with virtual threads](0004-java21-spring-boot4-virtual-threads.md) | Accepted |
 | 0005 | [Testing with Testcontainers, no in-memory fakes](0005-testcontainers-over-in-memory-fakes.md) | Accepted |
 | 0006 | [Monorepo with Maven multi-module](0006-monorepo-maven-multimodule.md) | Accepted |
+| 0007 | [Shared platform-messaging library](0007-platform-messaging-library.md) | Accepted |

@@ -33,6 +33,9 @@ flowchart LR
 | Mark → work | after the mark | Event is **lost** (at-most-once) ❌ |
 | Work → mark | after the work | Event is **re-processed**, which is harmless because the work is idempotent ✅ |
 
+## The outbox needs the same discipline
+The relay (Feature 010) is at-least-once too: a crash after Kafka acks but before the outbox rows are deleted re-sends them. That's safe for the same reason as above. Alert ids are derived from the source `eventId`, and alert-service inserts with `ON CONFLICT DO NOTHING`.
+
 ## Kafka transactions (EOS)
 Kafka's `transactional.id` + `read_committed` give exactly-once for **consume → process → produce within Kafka**. Once a side effect leaves Kafka (DB write, email), you are back to idempotent consumers. That's why we rely on idempotent handlers rather than Kafka transactions alone.
 

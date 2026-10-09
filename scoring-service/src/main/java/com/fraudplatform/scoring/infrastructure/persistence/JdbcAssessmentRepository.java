@@ -6,6 +6,8 @@ import com.fraudplatform.scoring.application.TransactionHistoryQuery;
 import com.fraudplatform.scoring.domain.RiskAssessment;
 import com.fraudplatform.scoring.domain.RuleHit;
 import com.fraudplatform.scoring.domain.Transaction;
+import com.fraudplatform.scoring.infrastructure.kafka.FraudAlertEvents;
+import com.fraudplatform.messaging.outbox.OutboxWriter;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +21,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p>{@link #saveAll} issues three {@code batchUpdate}s inside <b>one</b> transaction: one commit
  * (one WAL fsync) for the whole Kafka poll. With {@code reWriteBatchedInserts=true} the driver
  * rewrites each batch into multi-row {@code INSERT … VALUES (…),(…)} statements.
+ *
+ * <p>Alerts are appended to the <b>outbox</b> in the same transaction (Feature 010): the assessment
+ * and its alert commit together or not at all, and the relay publishes the alert afterwards.
  *
  * <p>Every insert is {@code ON CONFLICT DO NOTHING}, and the transaction PK is a deterministic
  * UUIDv7, so a redelivered batch is a silent no-op instead of a constraint violation.
@@ -55,10 +60,14 @@ public class JdbcAssessmentRepository implements AssessmentRepository, Transacti
 
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
+    private final OutboxWriter outbox;
+    private final FraudAlertEvents alertEvents;
 
-    public JdbcAssessmentRepository(JdbcTemplate jdbc, TransactionTemplate tx) {
+    public JdbcAssessmentRepository(JdbcTemplate jdbc, TransactionTemplate tx, OutboxWriter outbox, FraudAlertEvents alertEvents) {
         this.jdbc = jdbc;
         this.tx = tx;
+        this.outbox = outbox;
+        this.alertEvents = alertEvents;
     }
 
     public static UUID primaryKey(Transaction t) {
@@ -66,7 +75,7 @@ public class JdbcAssessmentRepository implements AssessmentRepository, Transacti
     }
 
     @Override
-    public void saveAll(List<RiskAssessment> assessments) {
+    public void saveAll(List<RiskAssessment> assessments, List<RiskAssessment> alerts) {
         List<RuleHitRow> hits = new ArrayList<>();
         for (RiskAssessment a : assessments) {
             UUID pk = primaryKey(a.transaction());
@@ -104,6 +113,7 @@ public class JdbcAssessmentRepository implements AssessmentRepository, Transacti
                 ps.setInt(3, h.hit().weight());
                 ps.setString(4, h.hit().reason());
             });
+            outbox.append(alerts.stream().map(alertEvents::toOutbox).toList());
         });
     }
 

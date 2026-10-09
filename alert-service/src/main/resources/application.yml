@@ -1,6 +1,8 @@
 spring:
   application:
     name: alert-service
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
   threads:
     virtual:
       enabled: true
@@ -12,6 +14,8 @@ spring:
       schema: alerts
       maximum-pool-size: 10
       connection-timeout: 2000
+      data-source-properties:
+        options: "-c statement_timeout=5000"
   flyway:
     schemas: alerts
     default-schema: alerts
@@ -42,6 +46,8 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+        request.timeout.ms: 3000
+        delivery.timeout.ms: 5000
 
 server:
   port: 8083

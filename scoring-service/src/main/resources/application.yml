@@ -1,6 +1,8 @@
 spring:
   application:
     name: scoring-service
+  lifecycle:
+    timeout-per-shutdown-phase: 20s   # bound graceful shutdown (in-flight batch + outbox drain)
   threads:
     virtual:
       enabled: true
@@ -16,6 +18,7 @@ spring:
       minimum-idle: 2
       connection-timeout: 2000      # fail fast instead of queueing forever
       data-source-properties:
+        options: "-c statement_timeout=5000"   # no query may run longer than 5 s
         reWriteBatchedInserts: true # driver turns N single-row INSERTs into multi-row VALUES
   flyway:
     schemas: scoring                # created if missing; migrations in db/migration
@@ -43,6 +46,8 @@ spring:
       properties:
         enable.idempotence: true
         linger.ms: 5
+        request.timeout.ms: 3000
+        delivery.timeout.ms: 5000
 
 server:
   port: 8082
@@ -60,6 +65,7 @@ management:
 
 fraud:
   scoring:
+    publish-timeout: 5s           # outbox relay waits at most this long for Kafka acks
     max-concurrent-accounts: 64   # accounts scored in parallel per poll (virtual threads, Semaphore-bounded)
     rules:
       high-amount-usd: 5000

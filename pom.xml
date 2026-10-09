@@ -14,6 +14,7 @@
     <modules>
         <module>common</module>
         <module>test-support</module>
+        <module>platform-messaging</module>
         <module>ingestion-service</module>
         <module>scoring-service</module>
         <module>alert-service</module>
@@ -28,6 +29,7 @@
 
         <spring-boot.version>4.1.1</spring-boot.version>
         <archunit.version>1.5.1</archunit.version>
+        <resilience4j.version>2.4.0</resilience4j.version>
 
         <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.5.3</maven-surefire-plugin.version>
@@ -55,6 +57,16 @@
                 <groupId>com.fraudplatform</groupId>
                 <artifactId>test-support</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fraudplatform</groupId>
+                <artifactId>platform-messaging</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.resilience4j</groupId>
+                <artifactId>resilience4j-circuitbreaker</artifactId>
+                <version>${resilience4j.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.tngtech.archunit</groupId>

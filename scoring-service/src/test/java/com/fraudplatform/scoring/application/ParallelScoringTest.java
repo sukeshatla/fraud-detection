@@ -105,7 +105,7 @@ class ParallelScoringTest {
     private static ScoreTransactionService service(AccountActivityStore store, int maxConcurrentAccounts) {
         return new ScoreTransactionService(mock(ProcessedEventStore.class), store, new RuleEngine(List.of()),
                 mock(AssessmentRepository.class), new FakeHighRiskAccountCache(), (tx, a) -> Optional.empty(),
-                new ScoreBlender(0.6), mock(AlertPublisher.class), Clock.fixed(NOW, ZoneOffset.UTC), maxConcurrentAccounts);
+                new ScoreBlender(0.6), Clock.fixed(NOW, ZoneOffset.UTC), maxConcurrentAccounts);
     }
 
     private static long timed(Runnable work) {

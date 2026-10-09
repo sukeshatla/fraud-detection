@@ -4,7 +4,6 @@ import com.fraudplatform.contracts.Topics;
 import com.fraudplatform.scoring.application.AccountActivityStore;
 import com.fraudplatform.scoring.application.AccountHistoryService;
 import com.fraudplatform.scoring.application.AccountRiskService;
-import com.fraudplatform.scoring.application.AlertPublisher;
 import com.fraudplatform.scoring.application.AssessmentRepository;
 import com.fraudplatform.scoring.application.HighRiskAccountCache;
 import com.fraudplatform.scoring.application.MlScorer;
@@ -20,7 +19,17 @@ import com.fraudplatform.scoring.domain.rules.HighAmountRule;
 import com.fraudplatform.scoring.domain.rules.HighRiskMccRule;
 import com.fraudplatform.scoring.domain.rules.KnownHighRiskAccountRule;
 import com.fraudplatform.scoring.domain.rules.VelocityRule;
-import com.fraudplatform.scoring.infrastructure.kafka.KafkaAlertPublisher;
+import com.fraudplatform.messaging.dlt.DltReplayer;
+import com.fraudplatform.messaging.outbox.OutboxRelay;
+import com.fraudplatform.messaging.outbox.OutboxRelayRunner;
+import com.fraudplatform.messaging.outbox.OutboxWriter;
+import com.fraudplatform.scoring.application.DeadLetterReplay;
+import com.fraudplatform.scoring.infrastructure.kafka.FraudAlertEvents;
+import com.fraudplatform.scoring.infrastructure.kafka.KafkaDeadLetterReplay;
+import com.fraudplatform.scoring.infrastructure.ml.CircuitBreakerMlScorer;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import org.springframework.kafka.core.ConsumerFactory;
 import com.fraudplatform.scoring.infrastructure.ml.LogisticRegressionMlScorer;
 import com.fraudplatform.scoring.infrastructure.ml.ModelLoader;
 import com.fraudplatform.scoring.infrastructure.ml.SemaphoreBulkheadMlScorer;
@@ -48,6 +57,10 @@ import tools.jackson.databind.json.JsonMapper;
 /** Composition root for scoring: rules, engine, use case and adapters. */
 @Configuration(proxyBeanMethods = false)
 class ScoringConfig {
+
+    /** pg_advisory_lock key electing the single active outbox relay among scoring instances. */
+    static final long OUTBOX_LOCK_KEY = 0x5C0_0001L;
+    static final int OUTBOX_BATCH = 500;
 
     @Bean
     Clock clock() {
@@ -100,14 +113,34 @@ class ScoringConfig {
         return new RedisProcessedEventStore(redis, props.processedTtl());
     }
 
+    // --- Transactional outbox (Feature 010) -------------------------------------------------
+
     @Bean
-    AlertPublisher alertPublisher(KafkaTemplate<String, String> template, JsonMapper mapper, ScoringProperties props) {
-        return new KafkaAlertPublisher(template, mapper, props.alertTopic(), props.publishTimeout());
+    OutboxWriter outboxWriter(JdbcTemplate jdbc, JsonMapper mapper) {
+        return new OutboxWriter(jdbc, mapper);
     }
 
     @Bean
-    JdbcAssessmentRepository assessmentRepository(JdbcTemplate jdbc, TransactionTemplate tx) {
-        return new JdbcAssessmentRepository(jdbc, tx);
+    OutboxRelay outboxRelay(JdbcTemplate jdbc, TransactionTemplate tx, KafkaTemplate<String, String> kafka, JsonMapper mapper,
+            ScoringProperties props, MeterRegistry meters) {
+        return new OutboxRelay(jdbc, tx, kafka, mapper, OUTBOX_LOCK_KEY, OUTBOX_BATCH, props.publishTimeout(), meters);
+    }
+
+    /** SmartLifecycle: starts with the context, drains its in-flight batch on shutdown. */
+    @Bean
+    OutboxRelayRunner outboxRelayRunner(OutboxRelay relay) {
+        return new OutboxRelayRunner(relay, OUTBOX_BATCH, Duration.ofMillis(100), Duration.ofSeconds(1));
+    }
+
+    @Bean
+    DeadLetterReplay deadLetterReplay(ConsumerFactory<String, String> consumers, KafkaTemplate<String, String> kafka) {
+        return new KafkaDeadLetterReplay(new DltReplayer(consumers, kafka, "scoring-dlt-replay"));
+    }
+
+    @Bean
+    JdbcAssessmentRepository assessmentRepository(JdbcTemplate jdbc, TransactionTemplate tx, OutboxWriter outbox,
+            JsonMapper mapper, ScoringProperties props) {
+        return new JdbcAssessmentRepository(jdbc, tx, outbox, new FraudAlertEvents(mapper, props.alertTopic()));
     }
 
     @Bean
@@ -136,16 +169,27 @@ class ScoringConfig {
         }
         var loaded = new ModelLoader(mapper).load(resources.getResource(ml.model()));
         var extractor = new FeatureExtractor(props.rules().usdRates(), props.rules().highRiskMccs());
-        return new SemaphoreBulkheadMlScorer(new LogisticRegressionMlScorer(extractor, loaded.model()),
+        // bulkhead( circuitBreaker( model ) ): cap concurrency, and stop calling a failing/slow model
+        CircuitBreaker breaker = CircuitBreaker.of("ml-model", CircuitBreakerConfig.custom()
+                .slidingWindowSize(20)
+                .minimumNumberOfCalls(20)
+                .failureRateThreshold(50)
+                .slowCallDurationThreshold(Duration.ofMillis(100))
+                .slowCallRateThreshold(50)
+                .waitDurationInOpenState(Duration.ofSeconds(10))
+                .permittedNumberOfCallsInHalfOpenState(5)
+                .build());
+        MlScorer model = new LogisticRegressionMlScorer(extractor, loaded.model());
+        return new SemaphoreBulkheadMlScorer(new CircuitBreakerMlScorer(model, breaker, meters),
                 ml.maxConcurrent(), ml.acquireTimeout(), meters);
     }
 
     @Bean
     ScoreTransactionService scoreTransactionService(ProcessedEventStore processed, AccountActivityStore activity,
             RuleEngine engine, AssessmentRepository repository, HighRiskAccountCache riskCache, MlScorer mlScorer,
-            AlertPublisher alerts, Clock clock, ScoringProperties props) {
+            Clock clock, ScoringProperties props) {
         return new ScoreTransactionService(processed, activity, engine, repository, riskCache, mlScorer,
-                new ScoreBlender(props.ml().ruleWeight()), alerts, clock, props.maxConcurrentAccounts());
+                new ScoreBlender(props.ml().ruleWeight()), clock, props.maxConcurrentAccounts());
     }
 
     @Bean

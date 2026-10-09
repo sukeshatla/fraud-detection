@@ -40,8 +40,8 @@ flowchart LR
 | Load testing with Gatling | [09](docs/concepts/09-load-testing-gatling.md) | 013 |
 | CI/CD pipeline | [10](docs/concepts/10-ci-cd-pipeline.md) | ✅ 000 · 014 |
 | Load balancing | [11](docs/concepts/11-load-balancing.md) | 011 |
-| Idempotency & exactly-once | [12](docs/concepts/12-idempotency-and-exactly-once.md) | 002 · 003 · 004 |
-| Resilience: retries, DLT, circuit breaker, outbox | [13](docs/concepts/13-resilience-patterns.md) | 010 |
+| Idempotency & exactly-once | [12](docs/concepts/12-idempotency-and-exactly-once.md) | ✅ 002 · 003 · 004 · 010 |
+| Resilience: retries, DLT, circuit breaker, outbox | [13](docs/concepts/13-resilience-patterns.md) | ✅ 010 |
 | Observability | [14](docs/concepts/14-observability.md) | 012 |
 | ML in production: feature parity, blending, degradation | [15](docs/concepts/15-ml-in-production.md) | ✅ 006 |
 
@@ -70,7 +70,7 @@ flowchart LR
 | 007 | Alert management API | ✅ |
 | 008 | React dashboard | ✅ |
 | 009 | Concurrency deep dive | ✅ |
-| 010 | Resilience | 📝 |
+| 010 | Resilience | ✅ |
 | 011 | Load balancing | 📝 |
 | 012 | Observability | 📝 |
 | 013 | Gatling load tests | 📝 |
@@ -130,6 +130,7 @@ docker compose -f infra/docker-compose.yml --profile tools up -d kafka-ui
 
 ```
 ├── common/                 Shared Kafka event contracts (records only)
+├── platform-messaging/      Shared infra: transactional outbox, jittered backoff, DLT replay (010)
 ├── test-support/           Shared Testcontainers images + Kafka/Redis test helpers
 ├── ingestion-service/      REST → Kafka, rate limiting, idempotency (001, 002)
 │   └── src/main/java/…/ingestion/

@@ -9,7 +9,8 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
-import org.springframework.util.backoff.FixedBackOff;
+import com.fraudplatform.messaging.backoff.JitteredExponentialBackOff;
+import java.time.Duration;
 
 /**
  * What happens when a record fails.
@@ -17,8 +18,8 @@ import org.springframework.util.backoff.FixedBackOff;
  * <ul>
  *   <li><b>Poison pills</b> ({@link InvalidEventException}): straight to the DLT, no retries.
  *       Retrying a malformed message can never succeed and would block the partition.
- *   <li><b>Transient errors</b> (Redis/Kafka hiccup): a couple of quick retries, then the DLT.
- *       Feature 010 upgrades this to exponential backoff with jitter.
+ *   <li><b>Transient errors</b> (Redis/Kafka hiccup): 3 retries with exponential backoff and
+ *       jitter (200 ms, 400 ms, 800 ms ± 50%), then the DLT, from where it can be replayed.
  * </ul>
  * The DLT record carries the original topic/partition/offset and the exception in headers.
  */
@@ -31,7 +32,8 @@ class KafkaErrorHandlingConfig {
     CommonErrorHandler kafkaErrorHandler(KafkaTemplate<String, String> template) {
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(template,
                 (record, ex) -> new TopicPartition(record.topic() + ".DLT", -1)); // -1: let Kafka pick the partition
-        DefaultErrorHandler handler = new DefaultErrorHandler(recoverer, new FixedBackOff(500L, 2L));
+        DefaultErrorHandler handler = new DefaultErrorHandler(recoverer,
+                new JitteredExponentialBackOff(Duration.ofMillis(200), 2.0, 0.5, Duration.ofSeconds(5), 3));
         handler.addNotRetryableExceptions(InvalidEventException.class);
         return handler;
     }

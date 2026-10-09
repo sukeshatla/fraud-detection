@@ -3,6 +3,7 @@ package com.fraudplatform.alerts.application;
 import com.fraudplatform.alerts.domain.AlertStatus;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -21,15 +22,12 @@ public class ReviewAlertService {
 
     private final AlertRepository repository;
     private final AlertLock lock;
-    private final AlertResolutionPublisher publisher;
     private final AlertChangeBus changes;
     private final Clock clock;
 
-    public ReviewAlertService(AlertRepository repository, AlertLock lock, AlertResolutionPublisher publisher,
-            AlertChangeBus changes, Clock clock) {
+    public ReviewAlertService(AlertRepository repository, AlertLock lock, AlertChangeBus changes, Clock clock) {
         this.repository = repository;
         this.lock = lock;
-        this.publisher = publisher;
         this.changes = changes;
         this.clock = clock;
     }
@@ -43,14 +41,14 @@ public class ReviewAlertService {
             }
             current.status().requireTransitionTo(to);
             Instant now = clock.instant();
-            updated = repository.transition(id, expectedVersion, to, actor, now);
+            Optional<AlertResolution> resolution = to.isTerminal()
+                    ? Optional.of(new AlertResolution(id, current.transactionId(), current.accountId(), to, actor, now))
+                    : Optional.empty();
+            // Status change + audit row + resolution event: one transaction (outbox, Feature 010)
+            updated = repository.transition(id, expectedVersion, to, actor, now, resolution);
         }
-        // The transition is committed: only now tell the world (never announce uncommitted state).
+        // Committed: refresh live dashboards (best effort; the resolution event is already in the outbox).
         changes.publish(new AlertChange(AlertChange.Type.UPDATED, updated));
-        if (to.isTerminal()) {
-            publisher.publish(new AlertResolution(updated.id(), updated.transactionId(), updated.accountId(), to, actor,
-                    updated.updatedAt()));
-        }
         return updated;
     }
 }
