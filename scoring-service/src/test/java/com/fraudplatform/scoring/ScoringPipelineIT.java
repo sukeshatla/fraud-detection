@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fraudplatform.contracts.Topics;
 import com.fraudplatform.contracts.events.FraudAlertEvent;
 import com.fraudplatform.contracts.events.TransactionReceivedEvent;
+import com.fraudplatform.scoring.application.AccountRiskService;
 import com.fraudplatform.scoring.support.IntegrationTest;
 import com.fraudplatform.testing.KafkaTestConsumer;
 import java.math.BigDecimal;
@@ -34,6 +35,9 @@ class ScoringPipelineIT {
 
     @Autowired
     private KafkaContainer kafka;
+
+    @Autowired
+    private AccountRiskService riskApi;
 
     @Test
     @DisplayName("AC-003-03/10: 6 transactions in a minute → VELOCITY alert on fraud.alerts.v1")
@@ -80,6 +84,34 @@ class ScoringPipelineIT {
         assertThat(alertsFor(account, 1)).hasSize(1); // the valid record behind the pill was still scored
     }
 
+    @Test
+    @DisplayName("AC-005-01/02: a DECLINE flags the account; its next transaction gets KNOWN_HIGH_RISK")
+    void declinedAccountIsFlaggedForNextTransaction() throws Exception {
+        String account = uniqueAccount();
+        // HIGH_AMOUNT 30 + HIGH_RISK_MCC 20 + (MT after US within 1h) GEO_VELOCITY 35 = 85 → DECLINE
+        send(eventIn(account, "10.00", "5411", "US", Instant.now().minusSeconds(60)));
+        send(eventIn(account, "9000.00", "7995", "MT", Instant.now()));
+        assertThat(alertsFor(account, 1).getFirst().decision()).isEqualTo("DECLINE");
+
+        send(eventIn(account, "12.00", "5411", "MT", Instant.now().plusSeconds(1))); // innocent-looking
+
+        FraudAlertEvent second = alertsFor(account, 2).get(1);
+        assertThat(second.ruleHits()).extracting(FraudAlertEvent.RuleHit::code).contains("KNOWN_HIGH_RISK");
+    }
+
+    @Test
+    @DisplayName("AC-005-03/05: risk API: flagged after a DECLINE, clean after DELETE (source of truth updated)")
+    void riskApiRoundTrip() throws Exception {
+        String account = uniqueAccount();
+        send(eventIn(account, "10.00", "5411", "US", Instant.now().minusSeconds(60)));
+        send(eventIn(account, "9000.00", "7995", "MT", Instant.now()));
+        alertsFor(account, 1);
+
+        assertThat(riskApi.riskOf(account).isHighRisk()).isTrue();
+        riskApi.clear(account);
+        assertThat(riskApi.riskOf(account).isHighRisk()).isFalse();
+    }
+
     private void send(TransactionReceivedEvent event) throws Exception {
         kafkaTemplate.send(Topics.TRANSACTIONS_RECEIVED, event.accountId(), mapper.writeValueAsString(event)).get();
     }
@@ -88,6 +120,11 @@ class ScoringPipelineIT {
         return KafkaTestConsumer.awaitRecords(kafka.getBootstrapServers(), Topics.FRAUD_ALERTS, account, expected).stream()
                 .map(r -> mapper.readValue(r.value(), FraudAlertEvent.class))
                 .toList();
+    }
+
+    private static TransactionReceivedEvent eventIn(String account, String amount, String mcc, String country, Instant at) {
+        return new TransactionReceivedEvent(1, UUID.randomUUID(), "txn-" + UUID.randomUUID(), account, new BigDecimal(amount),
+                "USD", "m-1", mcc, country, "CARD_NOT_PRESENT", at, at);
     }
 
     private static TransactionReceivedEvent event(UUID eventId, String account, String amount, String mcc, Instant occurredAt) {
