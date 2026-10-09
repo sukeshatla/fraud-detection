@@ -87,7 +87,7 @@ class ScoreTransactionServiceTest {
         service = new ScoreTransactionService(processed, activityStore,
                 new RuleEngine(List.of(BIG_IS_BAD, new KnownHighRiskAccountRule())), repository, riskCache, ml,
                 new ScoreBlender(0.6), alerts,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC), 8);
         lenient().when(activityStore.recordAndGet(any())).thenReturn(AccountActivity.none());
     }
 

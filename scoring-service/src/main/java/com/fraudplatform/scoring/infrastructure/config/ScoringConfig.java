@@ -145,7 +145,7 @@ class ScoringConfig {
             RuleEngine engine, AssessmentRepository repository, HighRiskAccountCache riskCache, MlScorer mlScorer,
             AlertPublisher alerts, Clock clock, ScoringProperties props) {
         return new ScoreTransactionService(processed, activity, engine, repository, riskCache, mlScorer,
-                new ScoreBlender(props.ml().ruleWeight()), alerts, clock);
+                new ScoreBlender(props.ml().ruleWeight()), alerts, clock, props.maxConcurrentAccounts());
     }
 
     @Bean

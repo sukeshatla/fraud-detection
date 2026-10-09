@@ -10,11 +10,19 @@ import com.fraudplatform.scoring.domain.Transaction;
 import com.fraudplatform.scoring.domain.ml.ScoreBlender;
 import java.time.Clock;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -24,8 +32,10 @@ import java.util.stream.Collectors;
  *   <li>drop events already processed, and duplicates within the batch;
  *   <li>look up which accounts are flagged high-risk (one pipelined cache round trip);
  *   <li>record activity, evaluate rules, ask the model (bulkheaded; rules-only if unavailable)
- *       and blend; a DECLINE flags the account for the
- *       <i>rest of this batch</i> too;
+ *       and blend; a DECLINE flags the account for the <i>rest of this batch</i> too.
+ *       <b>Different accounts run in parallel on virtual threads; one account's transactions run
+ *       sequentially, in order</b> (velocity windows depend on it), the same guarantee Kafka
+ *       partitions give across consumers, applied inside a batch;
  *   <li>persist <b>all</b> assessments in one DB transaction (JDBC batch);
  *   <li>flag newly declined accounts in the cache (after the commit: the cache only reflects
  *       committed state);
@@ -50,6 +60,7 @@ public class ScoreTransactionService {
     private final ScoreBlender blender;
     private final AlertPublisher alerts;
     private final Clock clock;
+    private final int maxConcurrentAccounts;
 
     public ScoreTransactionService(
             ProcessedEventStore processed,
@@ -60,7 +71,8 @@ public class ScoreTransactionService {
             MlScorer mlScorer,
             ScoreBlender blender,
             AlertPublisher alerts,
-            Clock clock) {
+            Clock clock,
+            int maxConcurrentAccounts) {
         this.processed = processed;
         this.activityStore = activityStore;
         this.ruleEngine = ruleEngine;
@@ -70,6 +82,7 @@ public class ScoreTransactionService {
         this.blender = blender;
         this.alerts = alerts;
         this.clock = clock;
+        this.maxConcurrentAccounts = maxConcurrentAccounts;
     }
 
     /** @return assessments for the transactions that were actually (re)scored */
@@ -79,16 +92,22 @@ public class ScoreTransactionService {
             return List.of();
         }
 
-        Set<String> flagged = new HashSet<>(riskCache.flaggedAmong(
-                fresh.stream().map(Transaction::accountId).collect(Collectors.toSet())));
-        List<RiskAssessment> assessments = new ArrayList<>(fresh.size());
-        for (Transaction tx : fresh) {
-            RiskAssessment assessment = assess(tx, flagged.contains(tx.accountId()));
-            if (assessment.decision() == Decision.DECLINE) {
-                flagged.add(tx.accountId()); // later records of this account in the same poll
+        Map<String, List<Transaction>> byAccount = fresh.stream()
+                .collect(Collectors.groupingBy(Transaction::accountId, LinkedHashMap::new, Collectors.toList()));
+        Set<String> flagged = ConcurrentHashMap.newKeySet();
+        flagged.addAll(riskCache.flaggedAmong(byAccount.keySet()));
+
+        Map<UUID, RiskAssessment> byEvent = new ConcurrentHashMap<>();
+        forEachAccount(byAccount.values(), transactions -> {
+            for (Transaction tx : transactions) { // in order, within one account
+                RiskAssessment assessment = assess(tx, flagged.contains(tx.accountId()));
+                if (assessment.decision() == Decision.DECLINE) {
+                    flagged.add(tx.accountId()); // later records of this account in the same poll
+                }
+                byEvent.put(tx.eventId(), assessment);
             }
-            assessments.add(assessment);
-        }
+        });
+        List<RiskAssessment> assessments = fresh.stream().map(tx -> byEvent.get(tx.eventId())).toList();
 
         repository.saveAll(assessments);
         assessments.stream()
@@ -97,6 +116,47 @@ public class ScoreTransactionService {
         assessments.stream().filter(RiskAssessment::raisesAlert).forEach(alerts::publish);
         fresh.forEach(tx -> processed.markProcessed(tx.eventId()));
         return assessments;
+    }
+
+    /**
+     * Runs {@code work} once per account: inline for a single account, otherwise on virtual threads
+     * with at most {@code maxConcurrentAccounts} in flight (Semaphore). Virtual threads remove the
+     * thread limit, not the downstream limit. Any failure fails the whole batch, which is then
+     * redelivered (all side effects so far are idempotent).
+     */
+    private void forEachAccount(Collection<List<Transaction>> groups, Consumer<List<Transaction>> work) {
+        if (groups.size() == 1 || maxConcurrentAccounts <= 1) {
+            groups.forEach(work);
+            return;
+        }
+        Semaphore permits = new Semaphore(maxConcurrentAccounts);
+        List<Future<?>> futures = new ArrayList<>(groups.size());
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (List<Transaction> group : groups) {
+                futures.add(executor.submit(() -> {
+                    permits.acquireUninterruptibly();
+                    try {
+                        work.accept(group);
+                    } finally {
+                        permits.release();
+                    }
+                }));
+            }
+            for (Future<?> future : futures) {
+                await(future);
+            }
+        }
+    }
+
+    private static void await(Future<?> future) {
+        try {
+            future.get();
+        } catch (ExecutionException e) {
+            throw e.getCause() instanceof RuntimeException re ? re : new IllegalStateException(e.getCause());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while scoring a batch", e);
+        }
     }
 
     private RiskAssessment assess(Transaction tx, boolean knownHighRisk) {

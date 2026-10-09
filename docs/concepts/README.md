@@ -10,8 +10,8 @@ Each note explains a concept, shows where this codebase uses it, lists the pitfa
 | 04 | [JDBC batch processing](04-jdbc-batch-processing.md) | scoring persistence | ✅ F004 |
 | 05 | [Two-layer concurrent-write protection](05-two-layer-concurrent-write-protection.md) | alert review | ✅ F007 |
 | 06 | [Distributed rate limiting](06-distributed-rate-limiting.md) | ingestion edge | ✅ F002 |
-| 07 | [JDK 21 virtual threads](07-virtual-threads.md) | all services | ✅ enabled |
-| 08 | [Concurrency primitives: threads, semaphores, locks](08-concurrency-primitives.md) | ML bulkhead, parallel rules | 🟡 Semaphore ✅, F009 |
+| 07 | [JDK 21 virtual threads](07-virtual-threads.md) | all services, parallel scoring | ✅ measured |
+| 08 | [Concurrency primitives: threads, semaphores, locks](08-concurrency-primitives.md) | bulkheads, parallel scoring, `concurrency-lab` | ✅ F005 · F006 · F009 |
 | 09 | [Load testing with Gatling](09-load-testing-gatling.md) | `load-tests/` | 📝 F013 |
 | 10 | [CI/CD pipeline](10-ci-cd-pipeline.md) | `.github/workflows/` | ✅ CI basic |
 | 11 | [Load balancing](11-load-balancing.md) | NGINX, consumer groups | 📝 F011 |

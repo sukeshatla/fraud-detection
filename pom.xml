@@ -17,6 +17,7 @@
         <module>ingestion-service</module>
         <module>scoring-service</module>
         <module>alert-service</module>
+        <module>concurrency-lab</module>
     </modules>
 
     <properties>

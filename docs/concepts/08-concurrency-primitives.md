@@ -1,6 +1,6 @@
 # 08 · Concurrency primitives: threads, semaphores, locks & friends
 
-> **Status:** ✅ Semaphore bulkhead in [Feature 006](../../specs/006-ml-assisted-scoring/spec.md) ([`SemaphoreBulkheadMlScorer`](../../scoring-service/src/main/java/com/fraudplatform/scoring/infrastructure/ml/SemaphoreBulkheadMlScorer.java), test: 100 callers / 4 permits → high-water mark ≤ 4) · ✅ `ConcurrentHashMap` + `CompletableFuture` single-flight in [Feature 005](../../specs/005-high-risk-account-cache/spec.md) · 📝 full catalogue in [Feature 009](../../specs/009-concurrency-deep-dive/spec.md)
+> **Status:** ✅ Semaphore bulkhead in [Feature 006](../../specs/006-ml-assisted-scoring/spec.md) ([`SemaphoreBulkheadMlScorer`](../../scoring-service/src/main/java/com/fraudplatform/scoring/infrastructure/ml/SemaphoreBulkheadMlScorer.java), test: 100 callers / 4 permits → high-water mark ≤ 4) · ✅ `ConcurrentHashMap` + `CompletableFuture` single-flight in [Feature 005](../../specs/005-high-risk-account-cache/spec.md) · ✅ full catalogue with tests in [Feature 009](../../specs/009-concurrency-deep-dive/spec.md): [`concurrency-lab`](../../concurrency-lab/src/test/java/com/fraudplatform/lab)
 
 ## Map of the toolbox
 
@@ -75,6 +75,19 @@ Wall time ≈ the slowest rule, not the sum (AC-009-01).
 
 ### `BlockingQueue`: producer/consumer
 `ArrayBlockingQueue` (bounded) gives natural **backpressure**: producers block when it's full. An unbounded `LinkedBlockingQueue` hides overload until OOM.
+
+## The lab: every claim on this page is a test
+| Test | What it proves |
+|------|----------------|
+| [`AtomicsAndLongAdderTest`](../../concurrency-lab/src/test/java/com/fraudplatform/lab/AtomicsAndLongAdderTest.java) | `volatile long count; count++` from 8 threads **loses updates**; `AtomicLong` and `LongAdder` are exact |
+| [`PerKeyLockTest`](../../concurrency-lab/src/test/java/com/fraudplatform/lab/PerKeyLockTest.java) | `computeIfAbsent` per-key locks: 1,000 racing read-modify-writes stay exact, different keys run in parallel |
+| [`ModelHotSwapTest`](../../concurrency-lab/src/test/java/com/fraudplatform/lab/ModelHotSwapTest.java) | Unsynchronised two-field update → readers see **torn state**. `ReadWriteLock` and `AtomicReference<immutable>` → never. |
+| [`CoordinationTest`](../../concurrency-lab/src/test/java/com/fraudplatform/lab/CoordinationTest.java) | Latch start gate (<100 ms spread). `CyclicBarrier` phases. `CompletableFuture` fan-out = slowest call, and a hung call → `completeOnTimeout` default. `orTimeout`/`exceptionally`. Bounded queue throttles the producer. |
+| [`DeadlockTest`](../../concurrency-lab/src/test/java/com/fraudplatform/lab/DeadlockTest.java) | Opposite transfers deadlock. `ThreadMXBean.findDeadlockedThreads()` sees it, and interrupting a `lockInterruptibly()` waiter breaks it. Global lock ordering: 1,000 transfers, no deadlock, money conserved. |
+| [`PinningTest`](../../concurrency-lab/src/test/java/com/fraudplatform/lab/PinningTest.java) | `synchronized` pins virtual threads on JDK 21 (JFR events); `ReentrantLock` doesn't |
+| [`SemaphoreBulkheadMlScorerTest`](../../scoring-service/src/test/java/com/fraudplatform/scoring/infrastructure/ml/SemaphoreBulkheadMlScorerTest.java), [`ParallelScoringTest`](../../scoring-service/src/test/java/com/fraudplatform/scoring/application/ParallelScoringTest.java) | Semaphores cap concurrency under heavy fan-out |
+
+A detail the fan-out test caught: `completeOnTimeout` stops the **caller** waiting, but the slow task keeps running. Closing its executor (Java 21's `ExecutorService.close()`) then waited 5 s for it. Cancel abandoned work explicitly (`shutdownNow()`, or `future.cancel(true)`).
 
 ## Classic hazards
 
