@@ -7,7 +7,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 /** One place for container images, so every module tests against the same versions as docker-compose. */
 public final class Containers {
 
-    public static final String KAFKA_IMAGE = "apache/kafka-native:4.1.0";
+    // JVM image, same as docker-compose (ADR-0005). The GraalVM "kafka-native" image starts faster but
+    // crashed intermittently on CI runners (exit code 1 during startup).
+    public static final String KAFKA_IMAGE = "apache/kafka:4.1.0";
     public static final String REDIS_IMAGE = "redis:7.4-alpine";
     public static final String POSTGRES_IMAGE = "postgres:17-alpine";
 
