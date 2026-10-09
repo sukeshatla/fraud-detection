@@ -3,6 +3,7 @@ package com.fraudplatform.alerts.infrastructure.persistence;
 import com.fraudplatform.alerts.application.AlertDetails;
 import com.fraudplatform.alerts.application.AlertNotFoundException;
 import com.fraudplatform.alerts.application.AlertRepository;
+import com.fraudplatform.alerts.application.AlertResolution;
 import com.fraudplatform.alerts.application.AlertStats;
 import com.fraudplatform.alerts.application.AlertView;
 import com.fraudplatform.alerts.application.AuditEntry;
@@ -15,6 +16,8 @@ import com.fraudplatform.alerts.application.PageQuery;
 import com.fraudplatform.alerts.application.RuleHitView;
 import com.fraudplatform.alerts.application.StaleAlertException;
 import com.fraudplatform.alerts.domain.AlertStatus;
+import com.fraudplatform.alerts.infrastructure.kafka.AlertResolvedEvents;
+import com.fraudplatform.messaging.outbox.OutboxWriter;
 import com.fraudplatform.alerts.domain.Severity;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.OptimisticLockException;
@@ -54,11 +57,16 @@ public class JpaAlertRepository implements AlertRepository {
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
     private final TransactionTemplate readTx;
+    private final OutboxWriter outbox;
+    private final AlertResolvedEvents resolutionEvents;
 
-    public JpaAlertRepository(EntityManager em, JdbcTemplate jdbc, TransactionTemplate tx) {
+    public JpaAlertRepository(EntityManager em, JdbcTemplate jdbc, TransactionTemplate tx, OutboxWriter outbox,
+            AlertResolvedEvents resolutionEvents) {
         this.em = em;
         this.jdbc = jdbc;
         this.tx = tx;
+        this.outbox = outbox;
+        this.resolutionEvents = resolutionEvents;
         this.readTx = new TransactionTemplate(tx.getTransactionManager());
         this.readTx.setReadOnly(true);
     }
@@ -145,7 +153,8 @@ public class JpaAlertRepository implements AlertRepository {
     }
 
     @Override
-    public AlertView transition(UUID id, long expectedVersion, AlertStatus to, String actor, Instant at) {
+    public AlertView transition(UUID id, long expectedVersion, AlertStatus to, String actor, Instant at,
+            Optional<AlertResolution> resolution) {
         try {
             return tx.execute(s -> {
                 AlertEntity alert = em.find(AlertEntity.class, id);
@@ -159,6 +168,7 @@ public class JpaAlertRepository implements AlertRepository {
                 from.requireTransitionTo(to);
                 alert.moveTo(to, at);
                 em.persist(new AlertEventEntity(id, from, to, actor, at));
+                resolution.ifPresent(r -> outbox.append(List.of(resolutionEvents.toOutbox(r)))); // same transaction
                 // UPDATE alert SET …, version = v+1 WHERE id = ? AND version = v. 0 rows → OptimisticLockException
                 em.flush();
                 return toView(alert, hitsFor(List.of(id)));

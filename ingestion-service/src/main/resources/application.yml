@@ -1,6 +1,8 @@
 spring:
   application:
     name: ingestion-service
+  lifecycle:
+    timeout-per-shutdown-phase: 20s   # bound graceful shutdown
   threads:
     virtual:
       enabled: true          # Tomcat request handling on virtual threads (ADR-0004)

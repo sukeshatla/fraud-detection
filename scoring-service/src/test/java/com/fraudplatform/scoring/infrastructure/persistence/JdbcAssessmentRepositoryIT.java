@@ -40,7 +40,7 @@ class JdbcAssessmentRepositoryIT {
         RiskAssessment risky = assessment(acc, "t-1", T0, 50, List.of(new RuleHit("HIGH_AMOUNT", 30, "big"), new RuleHit("HIGH_RISK_MCC", 20, "mcc")));
         RiskAssessment clean = assessment(acc, "t-2", T0.plusSeconds(1), 0, List.of());
 
-        repository.saveAll(List.of(risky, clean));
+        repository.saveAll(List.of(risky, clean), List.of());
 
         assertThat(count("transaction", acc)).isEqualTo(2);
         assertThat(jdbc.queryForObject("""
@@ -58,8 +58,8 @@ class JdbcAssessmentRepositoryIT {
         String acc = uniqueAccount();
         List<RiskAssessment> batch = List.of(assessment(acc, "t-" + UUID.randomUUID(), T0, 50, List.of(new RuleHit("X", 50, "x"))));
 
-        repository.saveAll(batch);
-        repository.saveAll(batch);
+        repository.saveAll(batch, List.of());
+        repository.saveAll(batch, List.of());
 
         assertThat(count("transaction", acc)).isEqualTo(1);
         assertThat(jdbc.queryForObject("""
@@ -74,7 +74,7 @@ class JdbcAssessmentRepositoryIT {
         repository.saveAll(List.of(
                 assessment(acc, "old", T0, 0, List.of()),
                 assessment(acc, "mid", T0.plusSeconds(60), 45, List.of()),
-                assessment(acc, "new", T0.plusSeconds(120), 80, List.of())));
+                assessment(acc, "new", T0.plusSeconds(120), 80, List.of())), List.of());
 
         List<TransactionHistoryEntry> entries = history.recentForAccount(acc, 2);
 
@@ -89,7 +89,7 @@ class JdbcAssessmentRepositoryIT {
         Transaction tx = aTransaction().eventId(UUID.randomUUID()).accountId(acc).transactionId("ml-" + UUID.randomUUID())
                 .occurredAt(T0).build();
         repository.saveAll(List.of(new RiskAssessment(tx, 40, 60, Decision.REVIEW, List.of(), T0,
-                new com.fraudplatform.scoring.domain.ml.MlPrediction(0.87654, "lr-v1"))));
+                new com.fraudplatform.scoring.domain.ml.MlPrediction(0.87654, "lr-v1"))), List.of());
 
         var row = jdbc.queryForMap("""
                 SELECT r.ml_probability, r.model_version, r.risk_score FROM risk_score r

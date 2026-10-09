@@ -4,11 +4,15 @@ import com.fraudplatform.alerts.application.AlertChangeBus;
 import com.fraudplatform.alerts.application.AlertLock;
 import com.fraudplatform.alerts.application.AlertQueryService;
 import com.fraudplatform.alerts.application.AlertRepository;
-import com.fraudplatform.alerts.application.AlertResolutionPublisher;
 import com.fraudplatform.alerts.application.IngestAlertService;
 import com.fraudplatform.alerts.application.InvalidEventException;
 import com.fraudplatform.alerts.application.ReviewAlertService;
-import com.fraudplatform.alerts.infrastructure.kafka.KafkaAlertResolutionPublisher;
+import com.fraudplatform.alerts.infrastructure.kafka.AlertResolvedEvents;
+import com.fraudplatform.messaging.backoff.JitteredExponentialBackOff;
+import com.fraudplatform.messaging.outbox.OutboxRelay;
+import com.fraudplatform.messaging.outbox.OutboxRelayRunner;
+import com.fraudplatform.messaging.outbox.OutboxWriter;
+import java.time.Duration;
 import com.fraudplatform.alerts.infrastructure.persistence.JpaAlertRepository;
 import com.fraudplatform.alerts.infrastructure.redis.RedisAlertChangeBus;
 import com.fraudplatform.alerts.infrastructure.redis.RedisAlertLock;
@@ -31,7 +35,6 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.springframework.util.backoff.FixedBackOff;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Composition root for alert-service. */
@@ -39,14 +42,19 @@ import tools.jackson.databind.json.JsonMapper;
 @EnableScheduling // SSE heartbeats
 class AlertConfig {
 
+    /** pg_advisory_lock key electing the single active outbox relay among alert-service instances. */
+    static final long OUTBOX_LOCK_KEY = 0xA1E_0001L;
+    static final int OUTBOX_BATCH = 500;
+
     @Bean
     Clock clock() {
         return Clock.systemUTC();
     }
 
     @Bean
-    AlertRepository alertRepository(EntityManager em, JdbcTemplate jdbc, TransactionTemplate tx) {
-        return new JpaAlertRepository(em, jdbc, tx);
+    AlertRepository alertRepository(EntityManager em, JdbcTemplate jdbc, TransactionTemplate tx, OutboxWriter outbox,
+            JsonMapper mapper) {
+        return new JpaAlertRepository(em, jdbc, tx, outbox, new AlertResolvedEvents(mapper));
     }
 
     @Bean
@@ -55,9 +63,19 @@ class AlertConfig {
     }
 
     @Bean
-    AlertResolutionPublisher alertResolutionPublisher(KafkaTemplate<String, String> template, JsonMapper mapper,
+    OutboxWriter outboxWriter(JdbcTemplate jdbc, JsonMapper mapper) {
+        return new OutboxWriter(jdbc, mapper);
+    }
+
+    @Bean
+    OutboxRelay outboxRelay(JdbcTemplate jdbc, TransactionTemplate tx, KafkaTemplate<String, String> kafka, JsonMapper mapper,
             AlertProperties props, MeterRegistry meters) {
-        return new KafkaAlertResolutionPublisher(template, mapper, props.publishTimeout(), meters);
+        return new OutboxRelay(jdbc, tx, kafka, mapper, OUTBOX_LOCK_KEY, OUTBOX_BATCH, props.publishTimeout(), meters);
+    }
+
+    @Bean
+    OutboxRelayRunner outboxRelayRunner(OutboxRelay relay) {
+        return new OutboxRelayRunner(relay, OUTBOX_BATCH, Duration.ofMillis(100), Duration.ofSeconds(1));
     }
 
     @Bean
@@ -83,9 +101,8 @@ class AlertConfig {
     }
 
     @Bean
-    ReviewAlertService reviewAlertService(AlertRepository repository, AlertLock lock, AlertResolutionPublisher publisher,
-            AlertChangeBus changes, Clock clock) {
-        return new ReviewAlertService(repository, lock, publisher, changes, clock);
+    ReviewAlertService reviewAlertService(AlertRepository repository, AlertLock lock, AlertChangeBus changes, Clock clock) {
+        return new ReviewAlertService(repository, lock, changes, clock);
     }
 
     /** Poison pills → DLT immediately; transient failures retry briefly first. */
@@ -93,7 +110,7 @@ class AlertConfig {
     CommonErrorHandler kafkaErrorHandler(KafkaTemplate<String, String> template) {
         DefaultErrorHandler handler = new DefaultErrorHandler(
                 new DeadLetterPublishingRecoverer(template, (r, e) -> new TopicPartition(r.topic() + ".DLT", -1)),
-                new FixedBackOff(500L, 2L));
+                new JitteredExponentialBackOff(Duration.ofMillis(200), 2.0, 0.5, Duration.ofSeconds(5), 3));
         handler.addNotRetryableExceptions(InvalidEventException.class);
         return handler;
     }

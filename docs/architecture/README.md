@@ -165,12 +165,14 @@ sequenceDiagram
         SC->>SC: RuleEngine.evaluate() — rules in parallel
         SC->>SC: MlScorer.score() — Semaphore-bounded
     end
-    SC->>DB: JDBC batch INSERT transactions + scores (one round-trip per batch)
-    opt score ≥ threshold
-        SC->>R: SET risk:account:{id} (TTL + jitter)
-        SC->>K: send(fraud.alerts.v1)
-    end
+    SC->>DB: ONE tx: batch INSERT transactions + scores + outbox(alerts)
+    SC->>R: SET risk:account:{id} for DECLINEs (TTL + jitter)
     SC->>K: commit offsets (after DB write)
+    loop outbox relay (single active instance)
+        SC->>DB: read outbox in order
+        SC->>K: send(fraud.alerts.v1), await acks
+        SC->>DB: delete relayed rows
+    end
 
     K->>AL: fraud.alerts.v1
     AL->>DB: INSERT alert (ON CONFLICT DO NOTHING)

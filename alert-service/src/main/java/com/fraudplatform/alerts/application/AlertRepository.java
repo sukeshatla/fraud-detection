@@ -20,10 +20,12 @@ public interface AlertRepository {
     KeysetPage findAfter(KeysetQuery query);
 
     /**
-     * Moves the alert to {@code to} and writes an audit row, atomically, only if it is still at
+     * Moves the alert to {@code to}, writes an audit row and, for a resolution, enqueues the
+     * resolution event (transactional outbox), all atomically and only if the alert is still at
      * {@code expectedVersion}. Throws {@link StaleAlertException} otherwise (optimistic locking).
      */
-    AlertView transition(UUID id, long expectedVersion, AlertStatus to, String actor, Instant at);
+    AlertView transition(UUID id, long expectedVersion, AlertStatus to, String actor, Instant at,
+            Optional<AlertResolution> resolution);
 
     /** Queue KPIs; "raised"/"resolved" counted since {@code since}. */
     AlertStats stats(Instant since);

@@ -58,6 +58,6 @@ class QueryPlanIT {
                         t0.plusSeconds(a * 1000L + i), 0, List.of()));
             }
         }
-        repository.saveAll(batch);
+        repository.saveAll(batch, List.of());
     }
 }

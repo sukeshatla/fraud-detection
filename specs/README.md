@@ -33,7 +33,7 @@ Features build on each other. Each one is a shippable vertical slice with its ow
 | 007 | [Alert management API](007-alert-management/spec.md) | N+1 queries, pagination, two-layer concurrent-write protection | ✅ Implemented |
 | 008 | [Real-time analyst dashboard](008-react-dashboard/spec.md) | React + TS, SSE, optimistic UI, component testing | ✅ Implemented |
 | 009 | [Concurrency deep dive](009-concurrency-deep-dive/spec.md) | Virtual threads vs platform threads, pinning, Semaphore, CompletableFuture, locks | ✅ Implemented |
-| 010 | [Resilience](010-resilience/spec.md) | Retries + backoff, DLT, circuit breaker, transactional outbox | 📝 Spec |
+| 010 | [Resilience](010-resilience/spec.md) | Retries + backoff, DLT, circuit breaker, transactional outbox | ✅ Implemented |
 | 011 | [Load balancing & horizontal scaling](011-load-balancing/spec.md) | NGINX, health checks, consumer-group rebalancing | 📝 Spec |
 | 012 | [Observability](012-observability/spec.md) | Micrometer, Prometheus, Grafana, tracing, correlation IDs | 📝 Spec |
 | 013 | [Load testing with Gatling](013-load-testing-gatling/spec.md) | Open vs closed workload models, SLO assertions | 📝 Spec |
