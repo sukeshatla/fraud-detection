@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "eventId": "0b8e5a0e-6f4c-4c1e-9d55-3f0e2b1a7c11",
+  "transactionId": "txn-7f3a9c",
+  "accountId": "acc-1001",
+  "amount": 249.99,
+  "currency": "USD",
+  "merchantId": "m-5541",
+  "merchantCategoryCode": "5732",
+  "country": "US",
+  "channel": "CARD_NOT_PRESENT",
+  "occurredAt": "2026-10-09T18:15:30Z",
+  "receivedAt": "2026-10-09T18:15:30.120Z"
+}

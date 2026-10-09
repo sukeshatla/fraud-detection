@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: ingestion-service
+  threads:
+    virtual:
+      enabled: true          # Tomcat request handling on virtual threads (ADR-0004)
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all              # wait for all in-sync replicas → no loss on leader failover
+      compression-type: lz4
+      properties:
+        enable.idempotence: true         # broker dedupes producer retries (PID + sequence)
+        max.in.flight.requests.per.connection: 5   # ≤5 keeps ordering with idempotence
+        linger.ms: 5                     # tiny batching window: throughput ↑, latency ≈ same
+        request.timeout.ms: 3000
+        delivery.timeout.ms: 5000        # ≥ linger.ms + request.timeout.ms; bounds internal retries
+
+server:
+  port: 8081
+  shutdown: graceful         # finish in-flight requests on SIGTERM
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true        # /actuator/health/liveness and /readiness for LB + k8s
+
+fraud:
+  ingestion:
+    topic: transactions.received.v1
+    partitions: 12
+    replication-factor: 1
+    publish-timeout: 5s
+    max-clock-skew: 5m
