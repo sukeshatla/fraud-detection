@@ -24,4 +24,7 @@ public interface AlertRepository {
      * {@code expectedVersion}. Throws {@link StaleAlertException} otherwise (optimistic locking).
      */
     AlertView transition(UUID id, long expectedVersion, AlertStatus to, String actor, Instant at);
+
+    /** Queue KPIs; "raised"/"resolved" counted since {@code since}. */
+    AlertStats stats(Instant since);
 }

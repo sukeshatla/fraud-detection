@@ -29,7 +29,7 @@ class AlertQueryServiceTest {
     void clampsPageSize() {
         given(repository.findPage(any())).willReturn(new OffsetPage(List.of(), 0, 100, 0));
 
-        new AlertQueryService(repository).page(AlertStatus.OPEN, Optional.of(Severity.HIGH), 0, 5000);
+        new AlertQueryService(repository, java.time.Clock.systemUTC()).page(AlertStatus.OPEN, Optional.of(Severity.HIGH), 0, 5000);
 
         verify(repository).findPage(new PageQuery(AlertStatus.OPEN, Optional.of(Severity.HIGH), 0, 100));
     }
@@ -54,6 +54,6 @@ class AlertQueryServiceTest {
         UUID id = UUID.randomUUID();
         given(repository.findDetails(id)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> new AlertQueryService(repository).details(id)).isInstanceOf(AlertNotFoundException.class);
+        assertThatThrownBy(() -> new AlertQueryService(repository, java.time.Clock.systemUTC()).details(id)).isInstanceOf(AlertNotFoundException.class);
     }
 }

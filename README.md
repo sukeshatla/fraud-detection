@@ -68,7 +68,7 @@ flowchart LR
 | 005 | High-risk account cache | ✅ |
 | 006 | ML-assisted scoring | ✅ |
 | 007 | Alert management API | ✅ |
-| 008 | React dashboard | 📝 |
+| 008 | React dashboard | ✅ |
 | 009 | Concurrency deep dive | 📝 |
 | 010 | Resilience | 📝 |
 | 011 | Load balancing | 📝 |
@@ -94,6 +94,9 @@ docker compose -f infra/docker-compose.yml up -d
 ./mvnw -pl ingestion-service spring-boot:run
 ./mvnw -pl scoring-service spring-boot:run
 ./mvnw -pl alert-service spring-boot:run
+
+# 3b. Run the dashboard (http://localhost:5173)
+(cd dashboard && npm install && npm run dev)
 
 # 4. Submit a transaction
 curl -i -X POST localhost:8081/api/v1/transactions \
@@ -121,6 +124,7 @@ docker compose -f infra/docker-compose.yml --profile tools up -d kafka-ui
 |---------|------|
 | `./mvnw test` | Unit, slice, contract and architecture tests (no Docker) |
 | `./mvnw verify` | All of the above, plus Testcontainers integration tests and the coverage gate |
+| `cd dashboard && npm test` | Dashboard component tests (Vitest + Testing Library + MSW) |
 
 ## Repository layout
 
@@ -136,6 +140,7 @@ docker compose -f infra/docker-compose.yml --profile tools up -d kafka-ui
 ├── scoring-service/        Kafka → rules → Postgres (JDBC batch) → fraud.alerts.v1, risk cache (003–005)
 ├── ml/                     Model training (Python): synthetic data → logistic regression → JSON (006)
 ├── alert-service/          Analyst queue: Kafka → JPA, keyset paging, Redis lock + @Version (007)
+├── dashboard/              React 19 + TS analyst console: live SSE queue, review actions (008)
 ├── infra/                  docker-compose for local infrastructure
 ├── docs/
 │   ├── constitution.md     engineering rules & Definition of Done
