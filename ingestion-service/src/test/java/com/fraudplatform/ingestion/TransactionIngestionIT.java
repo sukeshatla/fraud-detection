@@ -6,7 +6,7 @@ import com.fraudplatform.contracts.EventHeaders;
 import com.fraudplatform.contracts.Topics;
 import com.fraudplatform.contracts.events.TransactionReceivedEvent;
 import com.fraudplatform.ingestion.support.KafkaTestConsumer;
-import com.fraudplatform.ingestion.support.TestcontainersConfiguration;
+import com.fraudplatform.ingestion.support.IntegrationTest;
 import com.fraudplatform.ingestion.support.TransactionJson;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -16,9 +16,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
@@ -27,9 +24,7 @@ import org.testcontainers.kafka.KafkaContainer;
 import tools.jackson.databind.json.JsonMapper;
 
 /** End-to-end through the real HTTP stack into a real Kafka broker (ADR-0005: no embedded fakes). */
-@SpringBootTest
-@AutoConfigureMockMvc
-@Import(TestcontainersConfiguration.class)
+@IntegrationTest
 class TransactionIngestionIT {
 
     @Autowired
