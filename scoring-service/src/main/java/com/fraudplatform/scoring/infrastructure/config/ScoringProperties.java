@@ -18,7 +18,22 @@ public record ScoringProperties(
         @DefaultValue("7d") Duration processedTtl,
         @DefaultValue("24h") Duration activityRetention,
         @DefaultValue Rules rules,
-        @DefaultValue RiskCache riskCache) {
+        @DefaultValue RiskCache riskCache,
+        @DefaultValue Ml ml) {
+
+    /**
+     * @param enabled        false → rules only
+     * @param model          model artifact written by ml/train.py
+     * @param ruleWeight     w in max(rule, w·rule + (1−w)·100p)
+     * @param maxConcurrent  bulkhead permits
+     * @param acquireTimeout how long to wait for a permit before falling back
+     */
+    public record Ml(
+            @DefaultValue("true") boolean enabled,
+            @DefaultValue("classpath:ml/model-v1.json") String model,
+            @DefaultValue("0.6") double ruleWeight,
+            @DefaultValue("32") int maxConcurrent,
+            @DefaultValue("20ms") Duration acquireTimeout) {}
 
     /**
      * @param flagWindow how long a DECLINE keeps an account flagged (source-of-truth query)

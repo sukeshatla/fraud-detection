@@ -1,6 +1,6 @@
 # 08 · Concurrency primitives: threads, semaphores, locks & friends
 
-> **Status:** 📝 Planned: [Feature 006](../../specs/006-ml-assisted-scoring/spec.md) (Semaphore bulkhead), [Feature 009](../../specs/009-concurrency-deep-dive/spec.md) (full catalogue with tests)
+> **Status:** ✅ Semaphore bulkhead in [Feature 006](../../specs/006-ml-assisted-scoring/spec.md) ([`SemaphoreBulkheadMlScorer`](../../scoring-service/src/main/java/com/fraudplatform/scoring/infrastructure/ml/SemaphoreBulkheadMlScorer.java), test: 100 callers / 4 permits → high-water mark ≤ 4) · ✅ `ConcurrentHashMap` + `CompletableFuture` single-flight in [Feature 005](../../specs/005-high-risk-account-cache/spec.md) · 📝 full catalogue in [Feature 009](../../specs/009-concurrency-deep-dive/spec.md)
 
 ## Map of the toolbox
 

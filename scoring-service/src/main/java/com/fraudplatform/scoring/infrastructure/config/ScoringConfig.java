@@ -7,10 +7,13 @@ import com.fraudplatform.scoring.application.AccountRiskService;
 import com.fraudplatform.scoring.application.AlertPublisher;
 import com.fraudplatform.scoring.application.AssessmentRepository;
 import com.fraudplatform.scoring.application.HighRiskAccountCache;
+import com.fraudplatform.scoring.application.MlScorer;
 import com.fraudplatform.scoring.application.ProcessedEventStore;
 import com.fraudplatform.scoring.application.ScoreTransactionService;
 import com.fraudplatform.scoring.domain.FraudRule;
 import com.fraudplatform.scoring.domain.RuleEngine;
+import com.fraudplatform.scoring.domain.ml.FeatureExtractor;
+import com.fraudplatform.scoring.domain.ml.ScoreBlender;
 import com.fraudplatform.scoring.domain.rules.CardTestingRule;
 import com.fraudplatform.scoring.domain.rules.GeoVelocityRule;
 import com.fraudplatform.scoring.domain.rules.HighAmountRule;
@@ -18,6 +21,9 @@ import com.fraudplatform.scoring.domain.rules.HighRiskMccRule;
 import com.fraudplatform.scoring.domain.rules.KnownHighRiskAccountRule;
 import com.fraudplatform.scoring.domain.rules.VelocityRule;
 import com.fraudplatform.scoring.infrastructure.kafka.KafkaAlertPublisher;
+import com.fraudplatform.scoring.infrastructure.ml.LogisticRegressionMlScorer;
+import com.fraudplatform.scoring.infrastructure.ml.ModelLoader;
+import com.fraudplatform.scoring.infrastructure.ml.SemaphoreBulkheadMlScorer;
 import com.fraudplatform.scoring.infrastructure.persistence.JdbcAssessmentRepository;
 import com.fraudplatform.scoring.infrastructure.persistence.JdbcHighRiskAccountSource;
 import com.fraudplatform.scoring.infrastructure.redis.RedisAccountActivityStore;
@@ -27,9 +33,11 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.TopicBuilder;
@@ -121,10 +129,23 @@ class ScoringConfig {
     }
 
     @Bean
+    MlScorer mlScorer(ScoringProperties props, JsonMapper mapper, ResourceLoader resources, MeterRegistry meters) {
+        ScoringProperties.Ml ml = props.ml();
+        if (!ml.enabled()) {
+            return (tx, activity) -> Optional.empty();
+        }
+        var loaded = new ModelLoader(mapper).load(resources.getResource(ml.model()));
+        var extractor = new FeatureExtractor(props.rules().usdRates(), props.rules().highRiskMccs());
+        return new SemaphoreBulkheadMlScorer(new LogisticRegressionMlScorer(extractor, loaded.model()),
+                ml.maxConcurrent(), ml.acquireTimeout(), meters);
+    }
+
+    @Bean
     ScoreTransactionService scoreTransactionService(ProcessedEventStore processed, AccountActivityStore activity,
-            RuleEngine engine, AssessmentRepository repository, HighRiskAccountCache riskCache, AlertPublisher alerts,
-            Clock clock) {
-        return new ScoreTransactionService(processed, activity, engine, repository, riskCache, alerts, clock);
+            RuleEngine engine, AssessmentRepository repository, HighRiskAccountCache riskCache, MlScorer mlScorer,
+            AlertPublisher alerts, Clock clock, ScoringProperties props) {
+        return new ScoreTransactionService(processed, activity, engine, repository, riskCache, mlScorer,
+                new ScoreBlender(props.ml().ruleWeight()), alerts, clock);
     }
 
     @Bean

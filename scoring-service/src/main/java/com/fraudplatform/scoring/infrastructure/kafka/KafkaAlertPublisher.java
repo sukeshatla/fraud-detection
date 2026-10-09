@@ -72,6 +72,8 @@ public class KafkaAlertPublisher implements AlertPublisher {
                 a.riskScore(),
                 a.decision().name(),
                 a.hits().stream().map(h -> new FraudAlertEvent.RuleHit(h.code(), h.weight(), h.reason())).toList(),
-                a.scoredAt());
+                a.scoredAt(),
+                a.mlPrediction().map(p -> p.probability()).orElse(null),
+                a.mlPrediction().map(p -> p.modelVersion()).orElse(null));
     }
 }

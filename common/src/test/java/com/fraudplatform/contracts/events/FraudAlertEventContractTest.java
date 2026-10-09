@@ -41,6 +41,15 @@ class FraudAlertEventContractTest {
     }
 
     @Test
+    @DisplayName("AC-006-03: additive evolution: a v1 payload written before ML fields existed still parses (ML = null)")
+    void oldPayloadWithoutMlFieldsStillParses() throws IOException {
+        FraudAlertEvent event = mapper.readValue(golden(), FraudAlertEvent.class);
+
+        assertThat(event.mlProbability()).isNull();
+        assertThat(event.modelVersion()).isNull();
+    }
+
+    @Test
     @DisplayName("Serialise → deserialise round-trip is lossless")
     void roundTrip() {
         FraudAlertEvent original = new FraudAlertEvent(
@@ -48,7 +57,7 @@ class FraudAlertEventContractTest {
                 new BigDecimal("1.50"), "USD", "m-1", "5411", "US", "CARD_NOT_PRESENT",
                 Instant.parse("2026-01-01T00:00:00Z"), 45, 45, "REVIEW",
                 List.of(new FraudAlertEvent.RuleHit("CARD_TESTING", 45, "3 small txns in 5m")),
-                Instant.parse("2026-01-01T00:00:01Z"));
+                Instant.parse("2026-01-01T00:00:01Z"), 0.8731, "lr-v1");
 
         FraudAlertEvent copy = mapper.readValue(mapper.writeValueAsString(original), FraudAlertEvent.class);
 

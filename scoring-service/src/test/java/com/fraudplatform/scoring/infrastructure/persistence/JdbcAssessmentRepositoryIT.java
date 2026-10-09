@@ -82,6 +82,23 @@ class JdbcAssessmentRepositoryIT {
         assertThat(entries).extracting(TransactionHistoryEntry::decision).containsExactly("DECLINE", "REVIEW");
     }
 
+    @Test
+    @DisplayName("AC-006-03: ML probability and model version are persisted (null when rules-only)")
+    void persistsMlColumns() {
+        String acc = uniqueAccount();
+        Transaction tx = aTransaction().eventId(UUID.randomUUID()).accountId(acc).transactionId("ml-" + UUID.randomUUID())
+                .occurredAt(T0).build();
+        repository.saveAll(List.of(new RiskAssessment(tx, 40, 60, Decision.REVIEW, List.of(), T0,
+                new com.fraudplatform.scoring.domain.ml.MlPrediction(0.87654, "lr-v1"))));
+
+        var row = jdbc.queryForMap("""
+                SELECT r.ml_probability, r.model_version, r.risk_score FROM risk_score r
+                JOIN transaction t ON t.id = r.transaction_pk WHERE t.account_id = ?""", acc);
+        assertThat((java.math.BigDecimal) row.get("ml_probability")).isEqualByComparingTo("0.8765");
+        assertThat(row.get("model_version")).isEqualTo("lr-v1");
+        assertThat(((Number) row.get("risk_score")).intValue()).isEqualTo(60);
+    }
+
     static RiskAssessment assessment(String acc, String txnId, Instant at, int score, List<RuleHit> hits) {
         Transaction tx = aTransaction().eventId(UUID.randomUUID()).accountId(acc).transactionId(txnId).occurredAt(at).build();
         return new RiskAssessment(tx, score, score, Decision.forScore(score), hits, at.plusMillis(300));

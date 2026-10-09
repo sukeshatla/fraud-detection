@@ -34,8 +34,8 @@ public class JdbcAssessmentRepository implements AssessmentRepository, Transacti
             ON CONFLICT DO NOTHING""";
 
     static final String INSERT_SCORE = """
-            INSERT INTO risk_score (transaction_pk, rule_score, risk_score, decision, scored_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO risk_score (transaction_pk, rule_score, ml_probability, model_version, risk_score, decision, scored_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT DO NOTHING""";
 
     static final String INSERT_HIT = """
@@ -91,9 +91,12 @@ public class JdbcAssessmentRepository implements AssessmentRepository, Transacti
             jdbc.batchUpdate(INSERT_SCORE, assessments, BATCH_SIZE, (ps, a) -> {
                 ps.setObject(1, primaryKey(a.transaction()));
                 ps.setInt(2, a.ruleScore());
-                ps.setInt(3, a.riskScore());
-                ps.setString(4, a.decision().name());
-                ps.setTimestamp(5, Timestamp.from(a.scoredAt()));
+                ps.setObject(3, a.mlPrediction().map(p -> java.math.BigDecimal.valueOf(p.probability())
+                        .setScale(4, java.math.RoundingMode.HALF_UP)).orElse(null), java.sql.Types.NUMERIC);
+                ps.setString(4, a.mlPrediction().map(p -> p.modelVersion()).orElse(null));
+                ps.setInt(5, a.riskScore());
+                ps.setString(6, a.decision().name());
+                ps.setTimestamp(7, Timestamp.from(a.scoredAt()));
             });
             jdbc.batchUpdate(INSERT_HIT, hits, BATCH_SIZE, (ps, h) -> {
                 ps.setObject(1, h.transactionPk());

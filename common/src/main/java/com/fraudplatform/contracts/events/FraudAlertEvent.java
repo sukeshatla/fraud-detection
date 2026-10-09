@@ -18,6 +18,8 @@ import java.util.UUID;
  * @param riskScore     0–100 final score (equals ruleScore until ML blending, Feature 006)
  * @param decision      APPROVE | REVIEW | DECLINE
  * @param ruleHits      which rules fired and why (explainability)
+ * @param mlProbability model fraud probability, or null if scored rules-only (added in v1.1, optional)
+ * @param modelVersion  model that produced {@code mlProbability}, or null (added in v1.1, optional)
  */
 public record FraudAlertEvent(
         int schemaVersion,
@@ -36,7 +38,9 @@ public record FraudAlertEvent(
         int riskScore,
         String decision,
         List<RuleHit> ruleHits,
-        Instant scoredAt) {
+        Instant scoredAt,
+        Double mlProbability,
+        String modelVersion) {
 
     public static final int SCHEMA_VERSION = 1;
     public static final String EVENT_TYPE = "FraudAlertRaised";

@@ -48,11 +48,13 @@ class ScoringPipelineIT {
             send(event(UUID.randomUUID(), account, "25.00", "5411", start.plusSeconds(i)));
         }
 
-        FraudAlertEvent alert = alertsFor(account, 1).getFirst();
+        FraudAlertEvent alert = alertWithRule(account, "VELOCITY");
 
-        assertThat(alert.decision()).isEqualTo("REVIEW");
-        assertThat(alert.ruleHits()).extracting(FraudAlertEvent.RuleHit::code).containsExactly("VELOCITY");
-        assertThat(alert.riskScore()).isEqualTo(40);
+        assertThat(alert.ruleScore()).isEqualTo(40);
+        assertThat(alert.riskScore()).isGreaterThanOrEqualTo(40); // ML may escalate, never dilute
+        assertThat(alert.decision()).isIn("REVIEW", "DECLINE");
+        assertThat(alert.mlProbability()).isBetween(0.0, 1.0);
+        assertThat(alert.modelVersion()).isEqualTo("lr-v1");
     }
 
     @Test
@@ -91,12 +93,11 @@ class ScoringPipelineIT {
         // HIGH_AMOUNT 30 + HIGH_RISK_MCC 20 + (MT after US within 1h) GEO_VELOCITY 35 = 85 → DECLINE
         send(eventIn(account, "10.00", "5411", "US", Instant.now().minusSeconds(60)));
         send(eventIn(account, "9000.00", "7995", "MT", Instant.now()));
-        assertThat(alertsFor(account, 1).getFirst().decision()).isEqualTo("DECLINE");
+        assertThat(alertWithRule(account, "GEO_VELOCITY").decision()).isEqualTo("DECLINE");
 
         send(eventIn(account, "12.00", "5411", "MT", Instant.now().plusSeconds(1))); // innocent-looking
 
-        FraudAlertEvent second = alertsFor(account, 2).get(1);
-        assertThat(second.ruleHits()).extracting(FraudAlertEvent.RuleHit::code).contains("KNOWN_HIGH_RISK");
+        assertThat(alertWithRule(account, "KNOWN_HIGH_RISK").amount()).isEqualByComparingTo("12.00");
     }
 
     @Test
@@ -114,6 +115,21 @@ class ScoringPipelineIT {
 
     private void send(TransactionReceivedEvent event) throws Exception {
         kafkaTemplate.send(Topics.TRANSACTIONS_RECEIVED, event.accountId(), mapper.writeValueAsString(event)).get();
+    }
+
+    /** Alerts for an account until one carries {@code ruleCode} (other alerts may come from ML escalation). */
+    private FraudAlertEvent alertWithRule(String account, String ruleCode) {
+        java.util.concurrent.atomic.AtomicReference<FraudAlertEvent> found = new java.util.concurrent.atomic.AtomicReference<>();
+        org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(30)).until(() -> {
+            KafkaTestConsumer.recordsWithin(kafka.getBootstrapServers(), Topics.FRAUD_ALERTS, account, Duration.ofMillis(500))
+                    .stream()
+                    .map(r -> mapper.readValue(r.value(), FraudAlertEvent.class))
+                    .filter(a -> a.ruleHits().stream().anyMatch(h -> h.code().equals(ruleCode)))
+                    .findFirst()
+                    .ifPresent(found::set);
+            return found.get() != null;
+        });
+        return found.get();
     }
 
     private List<FraudAlertEvent> alertsFor(String account, int expected) {
