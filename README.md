@@ -31,8 +31,8 @@ flowchart LR
 |---------|-----------|---------|
 | Event-driven decoupling with Kafka | [01](docs/concepts/01-event-driven-kafka.md) | ✅ 001 · ✅ 003 |
 | Distributed caching with Redis | [02](docs/concepts/02-distributed-caching-redis.md) | 005 |
-| N+1 queries and composite indexing | [03](docs/concepts/03-n-plus-one-and-composite-indexing.md) | 004 · 007 |
-| JDBC batch processing | [04](docs/concepts/04-jdbc-batch-processing.md) | 004 |
+| N+1 queries and composite indexing | [03](docs/concepts/03-n-plus-one-and-composite-indexing.md) | ✅ 004 · 007 |
+| JDBC batch processing | [04](docs/concepts/04-jdbc-batch-processing.md) | ✅ 004 |
 | Two-layer concurrent-write protection | [05](docs/concepts/05-two-layer-concurrent-write-protection.md) | 007 |
 | Distributed rate limiting | [06](docs/concepts/06-distributed-rate-limiting.md) | ✅ 002 |
 | JDK 21 virtual threads | [07](docs/concepts/07-virtual-threads.md) | ✅ 001 · 009 |
@@ -63,7 +63,7 @@ flowchart LR
 | 001 | Transaction ingestion API → Kafka | ✅ |
 | 002 | Distributed rate limiting & idempotency | ✅ |
 | 003 | Rule-based scoring engine | ✅ |
-| 004 | Persistence: JDBC batch, indexes | 📝 |
+| 004 | Persistence: JDBC batch, indexes | ✅ |
 | 005 | High-risk account cache | 📝 |
 | 006 | ML-assisted scoring | 📝 |
 | 007 | Alert management API | 📝 |
@@ -131,7 +131,7 @@ docker compose -f infra/docker-compose.yml --profile tools up -d kafka-ui
 │       ├── application/    use cases + ports (framework-free)
 │       ├── domain/         pure business model
 │       └── infrastructure/ Kafka adapter, wiring, config
-├── scoring-service/        Kafka → rules → fraud.alerts.v1 (003)
+├── scoring-service/        Kafka → rules → Postgres (JDBC batch) → fraud.alerts.v1 (003, 004)
 ├── infra/                  docker-compose for local infrastructure
 ├── docs/
 │   ├── constitution.md     engineering rules & Definition of Done

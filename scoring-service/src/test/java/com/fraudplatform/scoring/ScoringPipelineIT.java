@@ -75,8 +75,8 @@ class ScoringPipelineIT {
         ConsumerRecord<String, String> dead = KafkaTestConsumer
                 .awaitRecords(kafka.getBootstrapServers(), Topics.TRANSACTIONS_RECEIVED + ".DLT", account, 1).getFirst();
         assertThat(dead.value()).isEqualTo("{ this is not json");
-        assertThat(new String(dead.headers().lastHeader("kafka_dlt-exception-fqcn").value(), StandardCharsets.UTF_8))
-                .contains("ListenerExecutionFailedException");
+        assertThat(new String(dead.headers().lastHeader("kafka_dlt-original-topic").value(), StandardCharsets.UTF_8))
+                .isEqualTo(Topics.TRANSACTIONS_RECEIVED);
         assertThat(alertsFor(account, 1)).hasSize(1); // the valid record behind the pill was still scored
     }
 

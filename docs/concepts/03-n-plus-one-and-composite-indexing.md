@@ -1,6 +1,6 @@
 # 03 · N+1 queries and composite indexing
 
-> **Status:** 📝 Planned: [Feature 004](../../specs/004-persistence-jdbc-batch/spec.md) (indexes), [Feature 007](../../specs/007-alert-management/spec.md) (N+1 test)
+> **Status:** ✅ Composite index + EXPLAIN test in [Feature 004](../../specs/004-persistence-jdbc-batch/spec.md) ([`QueryPlanIT`](../../scoring-service/src/test/java/com/fraudplatform/scoring/infrastructure/persistence/QueryPlanIT.java)) · 📝 N+1 test in [Feature 007](../../specs/007-alert-management/spec.md)
 
 ## N+1 queries
 
@@ -47,6 +47,16 @@ Index on `(status, severity, created_at DESC)` is sorted like a phone book: by s
 4. **Covering index** (`INCLUDE (amount)`) answers the query from the index alone (Index Only Scan).
 5. **Partial index** `WHERE status = 'OPEN'` keeps the hot index tiny.
 6. Every index slows writes and costs memory. Index for actual query patterns, verified with `EXPLAIN (ANALYZE, BUFFERS)`.
+
+### A lesson from `QueryPlanIT`: the planner is cost-based
+The first version of the test seeded 400 accounts × 25 rows and asked for `LIMIT 50`. PostgreSQL chose **Bitmap Index Scan → Hash Join → Sort**, not the ordered index scan. That was the *right* choice: sorting 25 rows in memory is cheaper than walking the index in order. Also, `risk_score` had never been `ANALYZE`d, so its row estimate was a guess.
+
+The ordered plan (**Limit → Nested Loop → Index Scan on `ix_transaction_account_occurred` → Index Scan on `risk_score_pkey`**, no Sort) wins in the scenario the index exists for: a **busy account** (3,000 rows) and a small `LIMIT 20`. Postgres reads 20 index entries in order and stops.
+
+Takeaways for interviews:
+- Indexes are *options*; the planner picks based on **statistics**. Keep them fresh (autovacuum/`ANALYZE`), especially after bulk loads.
+- Test query plans with **realistic data distributions**, not toy data.
+- Read `EXPLAIN (ANALYZE, BUFFERS)`, and look for `Sort`, `Seq Scan` on big tables, and row-estimate vs actual mismatches.
 
 ### Our indexes
 | Query | Index |
