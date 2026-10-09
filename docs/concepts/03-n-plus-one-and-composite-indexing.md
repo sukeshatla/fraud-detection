@@ -1,6 +1,6 @@
 # 03 · N+1 queries and composite indexing
 
-> **Status:** ✅ Composite index + EXPLAIN test in [Feature 004](../../specs/004-persistence-jdbc-batch/spec.md) ([`QueryPlanIT`](../../scoring-service/src/test/java/com/fraudplatform/scoring/infrastructure/persistence/QueryPlanIT.java)) · 📝 N+1 test in [Feature 007](../../specs/007-alert-management/spec.md)
+> **Status:** ✅ Composite index + EXPLAIN test in [Feature 004](../../specs/004-persistence-jdbc-batch/spec.md) ([`QueryPlanIT`](../../scoring-service/src/test/java/com/fraudplatform/scoring/infrastructure/persistence/QueryPlanIT.java)) · ✅ N+1 test in [Feature 007](../../specs/007-alert-management/spec.md) ([`AlertQueryIT`](../../alert-service/src/test/java/com/fraudplatform/alerts/infrastructure/persistence/AlertQueryIT.java))
 
 ## N+1 queries
 
@@ -27,7 +27,23 @@ Each round trip is cheap alone (≈0.5 ms), but 101 of them are 50 ms. Under loa
 ⚠️ Fetch-joining a **collection** together with `Pageable` makes Hibernate paginate **in memory** (warning HHH90003004). Page the root entities first, then batch-fetch their children.
 
 ### Proving it in tests (Feature 007)
-A `datasource-proxy` statement counter wraps the DataSource. The test asserts that listing 50 alerts issues ≤ 3 statements, so an N+1 regression fails CI.
+`AlertQueryIT` counts statements with **Hibernate statistics** (`hibernate.generate_statistics=true` in the test profile):
+
+| Approach | Code | Statements for 50 alerts |
+|----------|------|-------------------------:|
+| Naive | Spring Data page query, then `alert.getRuleHits().size()` per row | **51** (1 + N), asserted exactly |
+| Ours | Page query + `select h from AlertRuleHitEntity h where h.alert.id in :ids` + count | **≤ 3**, asserted |
+
+An N+1 regression now fails CI instead of surfacing as a slow dashboard in production.
+
+### Offset vs keyset pagination
+| | `LIMIT 50 OFFSET 10000` | `WHERE (created_at, id) < (?, ?) ORDER BY created_at DESC, id DESC LIMIT 51` |
+|-|------------------------|------------------------------------------|
+| Cost at depth | Reads and discards 10,000 rows | Seeks into the index; reads 51 rows at any depth |
+| New rows arriving | Pages shift: duplicates/gaps | Stable: the cursor is a position, not a count |
+| Total count / jump to page N | ✅ | ❌ |
+
+The alert API exposes both: `GET /alerts` (offset, with total) and `GET /alerts/feed?after=` (keyset, for the live queue). The `id` in the cursor breaks ties between alerts with the same timestamp. Fetching `size + 1` rows tells us whether a next page exists, without a count query.
 
 ## Composite indexing
 

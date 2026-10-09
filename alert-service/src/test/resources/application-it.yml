@@ -1,0 +1,8 @@
+spring:
+  jpa:
+    properties:
+      hibernate:
+        generate_statistics: true   # lets AlertQueryIT count SQL statements (N+1 detection)
+logging:
+  level:
+    org.hibernate.engine.internal.StatisticalLoggingSessionEventListener: WARN
