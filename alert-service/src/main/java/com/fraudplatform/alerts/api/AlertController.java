@@ -2,6 +2,7 @@ package com.fraudplatform.alerts.api;
 
 import com.fraudplatform.alerts.application.AlertDetails;
 import com.fraudplatform.alerts.application.AlertQueryService;
+import com.fraudplatform.alerts.application.AlertStats;
 import com.fraudplatform.alerts.application.AlertView;
 import com.fraudplatform.alerts.application.Cursor;
 import com.fraudplatform.alerts.application.KeysetPage;
@@ -63,6 +64,12 @@ class AlertController {
         }
         KeysetPage page = queries.after(status, severity, cursor, size);
         return new AlertFeedResponse(page.items(), page.next().map(Cursor::encode).orElse(null));
+    }
+
+    /** KPIs for the dashboard header; "last hour" window. */
+    @GetMapping("/stats")
+    AlertStats stats() {
+        return queries.stats();
     }
 
     @GetMapping("/{id}")

@@ -3,6 +3,7 @@ package com.fraudplatform.alerts.infrastructure.persistence;
 import com.fraudplatform.alerts.application.AlertDetails;
 import com.fraudplatform.alerts.application.AlertNotFoundException;
 import com.fraudplatform.alerts.application.AlertRepository;
+import com.fraudplatform.alerts.application.AlertStats;
 import com.fraudplatform.alerts.application.AlertView;
 import com.fraudplatform.alerts.application.AuditEntry;
 import com.fraudplatform.alerts.application.Cursor;
@@ -14,6 +15,7 @@ import com.fraudplatform.alerts.application.PageQuery;
 import com.fraudplatform.alerts.application.RuleHitView;
 import com.fraudplatform.alerts.application.StaleAlertException;
 import com.fraudplatform.alerts.domain.AlertStatus;
+import com.fraudplatform.alerts.domain.Severity;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.Query;
@@ -165,6 +167,25 @@ public class JpaAlertRepository implements AlertRepository {
             // Another transaction committed first (possible when the Redis lock was bypassed or expired).
             throw new StaleAlertException(findById(id).orElseThrow(() -> new AlertNotFoundException(id)));
         }
+    }
+
+    /** One pass over the table with FILTER clauses. At scale: a rollup table or materialized view. */
+    @Override
+    public AlertStats stats(Instant since) {
+        Timestamp t = Timestamp.from(since);
+        return jdbc.queryForObject("""
+                SELECT count(*) FILTER (WHERE status = 'OPEN' AND severity = 'HIGH')   AS open_high,
+                       count(*) FILTER (WHERE status = 'OPEN' AND severity = 'MEDIUM') AS open_medium,
+                       count(*) FILTER (WHERE status = 'OPEN' AND severity = 'LOW')    AS open_low,
+                       count(*) FILTER (WHERE status = 'UNDER_REVIEW')                 AS under_review,
+                       count(*) FILTER (WHERE created_at >= ?)                          AS raised,
+                       count(*) FILTER (WHERE status = 'CONFIRMED_FRAUD' AND updated_at >= ?) AS confirmed,
+                       count(*) FILTER (WHERE status = 'FALSE_POSITIVE'  AND updated_at >= ?) AS dismissed
+                FROM alert""", (rs, i) -> new AlertStats(
+                Map.of(Severity.HIGH, rs.getLong("open_high"), Severity.MEDIUM, rs.getLong("open_medium"),
+                        Severity.LOW, rs.getLong("open_low")),
+                rs.getLong("under_review"), rs.getLong("raised"), rs.getLong("confirmed"), rs.getLong("dismissed"), since),
+                t, t, t);
     }
 
     private List<AlertView> toViews(List<AlertEntity> alerts) {

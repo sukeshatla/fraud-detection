@@ -1,5 +1,6 @@
 package com.fraudplatform.alerts.infrastructure.config;
 
+import com.fraudplatform.alerts.application.AlertChangeBus;
 import com.fraudplatform.alerts.application.AlertLock;
 import com.fraudplatform.alerts.application.AlertQueryService;
 import com.fraudplatform.alerts.application.AlertRepository;
@@ -9,6 +10,7 @@ import com.fraudplatform.alerts.application.InvalidEventException;
 import com.fraudplatform.alerts.application.ReviewAlertService;
 import com.fraudplatform.alerts.infrastructure.kafka.KafkaAlertResolutionPublisher;
 import com.fraudplatform.alerts.infrastructure.persistence.JpaAlertRepository;
+import com.fraudplatform.alerts.infrastructure.redis.RedisAlertChangeBus;
 import com.fraudplatform.alerts.infrastructure.redis.RedisAlertLock;
 import com.fraudplatform.contracts.Topics;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -18,19 +20,23 @@ import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.backoff.FixedBackOff;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Composition root for alert-service. */
 @Configuration(proxyBeanMethods = false)
+@EnableScheduling // SSE heartbeats
 class AlertConfig {
 
     @Bean
@@ -55,19 +61,31 @@ class AlertConfig {
     }
 
     @Bean
-    IngestAlertService ingestAlertService(AlertRepository repository) {
-        return new IngestAlertService(repository);
+    RedisMessageListenerContainer redisMessageListenerContainer(RedisConnectionFactory connectionFactory) {
+        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
+        container.setConnectionFactory(connectionFactory);
+        return container;
     }
 
     @Bean
-    AlertQueryService alertQueryService(AlertRepository repository) {
-        return new AlertQueryService(repository);
+    AlertChangeBus alertChangeBus(StringRedisTemplate redis, RedisMessageListenerContainer container, JsonMapper mapper) {
+        return new RedisAlertChangeBus(redis, container, mapper);
+    }
+
+    @Bean
+    IngestAlertService ingestAlertService(AlertRepository repository, AlertChangeBus changes) {
+        return new IngestAlertService(repository, changes);
+    }
+
+    @Bean
+    AlertQueryService alertQueryService(AlertRepository repository, Clock clock) {
+        return new AlertQueryService(repository, clock);
     }
 
     @Bean
     ReviewAlertService reviewAlertService(AlertRepository repository, AlertLock lock, AlertResolutionPublisher publisher,
-            Clock clock) {
-        return new ReviewAlertService(repository, lock, publisher, clock);
+            AlertChangeBus changes, Clock clock) {
+        return new ReviewAlertService(repository, lock, publisher, changes, clock);
     }
 
     /** Poison pills → DLT immediately; transient failures retry briefly first. */

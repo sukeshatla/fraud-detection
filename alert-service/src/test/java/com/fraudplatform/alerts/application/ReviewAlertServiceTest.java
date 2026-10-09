@@ -39,13 +39,16 @@ class ReviewAlertServiceTest {
     @Mock
     private AlertResolutionPublisher publisher;
 
+    @Mock
+    private AlertChangeBus changes;
+
     private final AtomicBoolean lockReleased = new AtomicBoolean();
     private boolean lockAvailable = true;
 
     private final AlertLock lock = alertId -> lockAvailable ? Optional.of(() -> lockReleased.set(true)) : Optional.empty();
 
     private ReviewAlertService service() {
-        return new ReviewAlertService(repository, lock, publisher, Clock.fixed(NOW, ZoneOffset.UTC));
+        return new ReviewAlertService(repository, lock, publisher, changes, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -54,7 +57,7 @@ class ReviewAlertServiceTest {
         lockAvailable = false;
 
         assertThatThrownBy(() -> service().review(ID, UNDER_REVIEW, 0, "analyst-1")).isInstanceOf(AlertLockedException.class);
-        verifyNoInteractions(repository, publisher);
+        verifyNoInteractions(repository, publisher, changes);
     }
 
     @Test
@@ -94,6 +97,7 @@ class ReviewAlertServiceTest {
 
         assertThat(service().review(ID, UNDER_REVIEW, 0, "analyst-1").version()).isEqualTo(1);
         verifyNoInteractions(publisher);
+        verify(changes).publish(new AlertChange(AlertChange.Type.UPDATED, alert(ID, UNDER_REVIEW, 1)));
         assertThat(lockReleased).isTrue();
     }
 
@@ -121,5 +125,14 @@ class ReviewAlertServiceTest {
 
         assertThatThrownBy(() -> service().review(ID, UNDER_REVIEW, 0, "analyst-1")).isInstanceOf(StaleAlertException.class);
         assertThat(lockReleased).isTrue();
+    }
+
+    @Test
+    @DisplayName("AC-008-02: a failed review publishes no change to the live stream")
+    void failedReviewPublishesNothing() {
+        given(repository.findById(ID)).willReturn(Optional.of(alert(ID, OPEN, 0)));
+
+        assertThatThrownBy(() -> service().review(ID, CONFIRMED_FRAUD, 0, "a")).isInstanceOf(InvalidTransitionException.class);
+        verifyNoInteractions(changes);
     }
 }

@@ -1,0 +1,253 @@
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --text: #1c2330;
+  --muted: #5d6778;
+  --line: #e2e6ec;
+  --accent: #2f5bd3;
+  --high: #c2311f;
+  --medium: #b86e00;
+  --low: #3d6b4f;
+  --live: #6b3fd1;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #11151c;
+    --panel: #19202a;
+    --text: #e6e9ef;
+    --muted: #9aa4b5;
+    --line: #2a3340;
+    --accent: #7d9cff;
+    --high: #ff7b6b;
+    --medium: #ffb547;
+    --low: #7fcf9b;
+    --live: #b69cff;
+  }
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+h1 {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+}
+h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.4rem;
+}
+h3 {
+  font-size: 0.95rem;
+  margin: 1.25rem 0 0.5rem;
+}
+.top {
+  padding: 1rem 1.25rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.kpi-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.kpi,
+.score-box {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-width: 7rem;
+}
+.kpi-value {
+  font-size: 1.3rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.kpi-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.tone-high .kpi-value {
+  color: var(--high);
+}
+.tone-medium .kpi-value {
+  color: var(--medium);
+}
+.tone-live .kpi-value {
+  color: var(--live);
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(340px, 2fr) 3fr;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+}
+.queue,
+.detail,
+.detail-placeholder {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1rem;
+}
+.filters {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.filters label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.75rem;
+  color: var(--muted);
+  gap: 0.25rem;
+}
+select,
+button {
+  font: inherit;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+button {
+  cursor: pointer;
+}
+button:focus-visible,
+[role='listbox']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+[role='listbox'] {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 65vh;
+  overflow: auto;
+}
+.queue-row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr auto auto;
+  grid-template-areas: 'sev amount score time' 'sev meta meta new';
+  gap: 0.1rem 0.75rem;
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.queue-row.selected {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.queue-row .badge:first-child {
+  grid-area: sev;
+  align-self: center;
+}
+.amount {
+  grid-area: amount;
+  font-weight: 600;
+}
+.meta {
+  grid-area: meta;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.score {
+  grid-area: score;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.time {
+  grid-area: time;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  margin-right: 0.35rem;
+}
+.badge.new {
+  grid-area: new;
+  color: var(--live);
+  justify-self: end;
+}
+.severity-high {
+  color: var(--high);
+}
+.severity-medium {
+  color: var(--medium);
+}
+.severity-low {
+  color: var(--low);
+}
+.high-risk {
+  color: var(--high);
+}
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+.actions .danger {
+  border-color: var(--high);
+  color: var(--high);
+}
+.actions .quiet {
+  color: var(--muted);
+}
+.scores {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.hits {
+  padding-left: 1rem;
+}
+.hits li {
+  margin-bottom: 0.3rem;
+}
+.weight {
+  color: var(--high);
+  font-weight: 600;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+th,
+td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.error {
+  color: var(--high);
+  font-weight: 600;
+}
+.empty {
+  color: var(--muted);
+}
+.load-more {
+  margin-top: 0.75rem;
+  width: 100%;
+}
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}

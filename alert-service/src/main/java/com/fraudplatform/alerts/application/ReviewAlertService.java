@@ -22,12 +22,15 @@ public class ReviewAlertService {
     private final AlertRepository repository;
     private final AlertLock lock;
     private final AlertResolutionPublisher publisher;
+    private final AlertChangeBus changes;
     private final Clock clock;
 
-    public ReviewAlertService(AlertRepository repository, AlertLock lock, AlertResolutionPublisher publisher, Clock clock) {
+    public ReviewAlertService(AlertRepository repository, AlertLock lock, AlertResolutionPublisher publisher,
+            AlertChangeBus changes, Clock clock) {
         this.repository = repository;
         this.lock = lock;
         this.publisher = publisher;
+        this.changes = changes;
         this.clock = clock;
     }
 
@@ -43,6 +46,7 @@ public class ReviewAlertService {
             updated = repository.transition(id, expectedVersion, to, actor, now);
         }
         // The transition is committed: only now tell the world (never announce uncommitted state).
+        changes.publish(new AlertChange(AlertChange.Type.UPDATED, updated));
         if (to.isTerminal()) {
             publisher.publish(new AlertResolution(updated.id(), updated.transactionId(), updated.accountId(), to, actor,
                     updated.updatedAt()));

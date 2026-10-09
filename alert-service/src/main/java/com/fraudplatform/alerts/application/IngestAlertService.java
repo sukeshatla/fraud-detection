@@ -4,13 +4,19 @@ package com.fraudplatform.alerts.application;
 public class IngestAlertService {
 
     private final AlertRepository repository;
+    private final AlertChangeBus changes;
 
-    public IngestAlertService(AlertRepository repository) {
+    public IngestAlertService(AlertRepository repository, AlertChangeBus changes) {
         this.repository = repository;
+        this.changes = changes;
     }
 
     /** @return true if a new alert was created, false if it already existed */
     public boolean ingest(NewAlert alert) {
-        return repository.insertIfAbsent(alert);
+        boolean created = repository.insertIfAbsent(alert);
+        if (created) {
+            changes.publish(new AlertChange(AlertChange.Type.CREATED, AlertView.fromNew(alert)));
+        }
+        return created;
     }
 }

@@ -34,6 +34,11 @@ flowchart LR
 1. **HTTP traffic:** NGINX spreads requests across stateless instances. Statelessness is what makes this work, so all shared state (rate limits, idempotency, locks) lives in Redis.
 2. **Kafka partitions:** the consumer group coordinator assigns partitions to scoring instances. It's a different mechanism with the same goal. Adding an instance triggers a **rebalance**. The cooperative-sticky assignor moves only the partitions it has to.
 
+## Kafka groups split; SSE needs broadcast
+Kafka consumer groups give each record to **one** alert-service instance. A browser's SSE connection, however, lands on an arbitrary instance. So the instance that ingested an alert re-broadcasts the change over **Redis pub/sub** ([`RedisAlertChangeBus`](../../alert-service/src/main/java/com/fraudplatform/alerts/infrastructure/redis/RedisAlertChangeBus.java)), and every instance pushes it to its own SSE clients. Pub/sub is fire-and-forget, which is fine here because the DB is the source of truth and clients refetch on reconnect.
+
+Long-lived connections also affect **deploys**. Graceful shutdown waits for in-flight requests, and an SSE stream never finishes by itself. alert-service completes all streams on `ContextClosedEvent`, so shutdown doesn't hang for the whole grace period. Browsers reconnect, and the load balancer routes them to a healthy instance. This bug was caught in Feature 008: the test JVM took 30 s to exit.
+
 ## Health checks and draining
 - **Liveness:** is the process alive? (restart if not)
 - **Readiness:** should it get traffic? (remove from the LB if not)

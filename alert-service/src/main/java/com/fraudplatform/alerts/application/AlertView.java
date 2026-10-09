@@ -34,4 +34,12 @@ public record AlertView(
     public AlertView {
         ruleHits = List.copyOf(ruleHits);
     }
+
+    /** View of a just-created alert: OPEN, version 0. */
+    public static AlertView fromNew(NewAlert a) {
+        return new AlertView(a.id(), a.transactionId(), a.accountId(), a.amount(), a.currency(), a.merchantId(),
+                a.merchantCategoryCode(), a.country(), a.channel(), a.occurredAt(), a.ruleScore(), a.riskScore(),
+                a.mlProbability(), a.modelVersion(), a.decision(), a.severity(), AlertStatus.OPEN, 0, a.createdAt(),
+                a.createdAt(), a.ruleHits());
+    }
 }

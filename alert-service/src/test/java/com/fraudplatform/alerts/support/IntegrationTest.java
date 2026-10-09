@@ -12,7 +12,7 @@ import org.springframework.test.context.ActiveProfiles;
 /** Full-context IT on real containers. Use unchanged so every IT shares one cached context. */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT) // real server: needed for SSE
 @AutoConfigureMockMvc
 @ActiveProfiles("it")
 @Import(TestcontainersConfiguration.class)
