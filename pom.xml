@@ -93,6 +93,8 @@
                             <include>**/*IT.java</include>
                         </includes>
                         <argLine>@{argLine} -XX:+EnableDynamicAgentLoading</argLine>
+                        <!-- Test against compiled classes, not the Boot-repackaged jar (classes under BOOT-INF/ are invisible) -->
+                        <classesDirectory>${project.build.outputDirectory}</classesDirectory>
                     </configuration>
                     <executions>
                         <execution>
