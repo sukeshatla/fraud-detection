@@ -35,7 +35,7 @@ flowchart LR
 | JDBC batch processing | [04](docs/concepts/04-jdbc-batch-processing.md) | ✅ 004 |
 | Two-layer concurrent-write protection | [05](docs/concepts/05-two-layer-concurrent-write-protection.md) | ✅ 007 |
 | Distributed rate limiting | [06](docs/concepts/06-distributed-rate-limiting.md) | ✅ 002 |
-| JDK 21 virtual threads | [07](docs/concepts/07-virtual-threads.md) | ✅ 001 · 009 |
+| JDK 21 virtual threads | [07](docs/concepts/07-virtual-threads.md) | ✅ 001 · ✅ 009 |
 | Threads, semaphores, locks, CompletableFuture | [08](docs/concepts/08-concurrency-primitives.md) | ✅ 005 · 006 · 009 |
 | Load testing with Gatling | [09](docs/concepts/09-load-testing-gatling.md) | 013 |
 | CI/CD pipeline | [10](docs/concepts/10-ci-cd-pipeline.md) | ✅ 000 · 014 |
@@ -69,7 +69,7 @@ flowchart LR
 | 006 | ML-assisted scoring | ✅ |
 | 007 | Alert management API | ✅ |
 | 008 | React dashboard | ✅ |
-| 009 | Concurrency deep dive | 📝 |
+| 009 | Concurrency deep dive | ✅ |
 | 010 | Resilience | 📝 |
 | 011 | Load balancing | 📝 |
 | 012 | Observability | 📝 |
@@ -141,6 +141,7 @@ docker compose -f infra/docker-compose.yml --profile tools up -d kafka-ui
 ├── ml/                     Model training (Python): synthetic data → logistic regression → JSON (006)
 ├── alert-service/          Analyst queue: Kafka → JPA, keyset paging, Redis lock + @Version (007)
 ├── dashboard/              React 19 + TS analyst console: live SSE queue, review actions (008)
+├── concurrency-lab/        Executable concurrency notes: measured, asserted examples (009)
 ├── infra/                  docker-compose for local infrastructure
 ├── docs/
 │   ├── constitution.md     engineering rules & Definition of Done

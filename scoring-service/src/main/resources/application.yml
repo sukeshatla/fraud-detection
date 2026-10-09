@@ -60,6 +60,7 @@ management:
 
 fraud:
   scoring:
+    max-concurrent-accounts: 64   # accounts scored in parallel per poll (virtual threads, Semaphore-bounded)
     rules:
       high-amount-usd: 5000
       usd-rates:

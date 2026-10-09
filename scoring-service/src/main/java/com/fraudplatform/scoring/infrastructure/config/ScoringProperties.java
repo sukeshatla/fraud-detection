@@ -17,6 +17,7 @@ public record ScoringProperties(
         @DefaultValue("5s") Duration publishTimeout,
         @DefaultValue("7d") Duration processedTtl,
         @DefaultValue("24h") Duration activityRetention,
+        @DefaultValue("64") int maxConcurrentAccounts,
         @DefaultValue Rules rules,
         @DefaultValue RiskCache riskCache,
         @DefaultValue Ml ml) {
