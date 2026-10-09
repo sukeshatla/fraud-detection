@@ -6,8 +6,8 @@ Each note explains a concept, shows where this codebase uses it, lists the pitfa
 |---|---------|-------------------|--------|
 | 01 | [Event-driven decoupling with Kafka](01-event-driven-kafka.md) | ingestion → `transactions.received.v1` | ✅ producer |
 | 02 | [Distributed caching with Redis](02-distributed-caching-redis.md) | risk cache, velocity windows | 🟡 windows ✅, cache F005 |
-| 03 | [N+1 queries and composite indexing](03-n-plus-one-and-composite-indexing.md) | alert queue, account history | 📝 F004/F007 |
-| 04 | [JDBC batch processing](04-jdbc-batch-processing.md) | scoring persistence | 📝 F004 |
+| 03 | [N+1 queries and composite indexing](03-n-plus-one-and-composite-indexing.md) | alert queue, account history | 🟡 index ✅, N+1 F007 |
+| 04 | [JDBC batch processing](04-jdbc-batch-processing.md) | scoring persistence | ✅ F004 |
 | 05 | [Two-layer concurrent-write protection](05-two-layer-concurrent-write-protection.md) | alert review | 📝 F007 |
 | 06 | [Distributed rate limiting](06-distributed-rate-limiting.md) | ingestion edge | ✅ F002 |
 | 07 | [JDK 21 virtual threads](07-virtual-threads.md) | all services | ✅ enabled |

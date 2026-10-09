@@ -5,16 +5,22 @@ import com.fraudplatform.contracts.events.TransactionReceivedEvent;
 import com.fraudplatform.scoring.application.InvalidEventException;
 import com.fraudplatform.scoring.application.ScoreTransactionService;
 import com.fraudplatform.scoring.domain.Transaction;
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.listener.BatchListenerFailedException;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Inbound adapter: Kafka → use case.
+ * Inbound adapter: one Kafka poll → one use-case call (JDBC batching needs the whole batch).
  *
- * <p>One listener thread per assigned partition ({@code spring.kafka.listener.concurrency}), so the
- * records of one account (one partition) are processed strictly in order.
+ * <p><b>Poison pills in a batch.</b> Records before the first invalid one are scored. Then
+ * {@link BatchListenerFailedException} tells the error handler the exact index: offsets before it
+ * are committed, that record goes to the DLT, and the rest are redelivered.
+ *
+ * <p>One listener thread per assigned partition, so one account's records stay in order.
  */
 @Component
 class TransactionReceivedListener {
@@ -27,9 +33,20 @@ class TransactionReceivedListener {
         this.mapper = mapper;
     }
 
-    @KafkaListener(id = "scoring", topics = Topics.TRANSACTIONS_RECEIVED, groupId = "scoring")
-    void onTransaction(String payload) {
-        service.score(toDomain(payload));
+    @KafkaListener(id = "scoring", topics = Topics.TRANSACTIONS_RECEIVED, groupId = "scoring", batch = "true")
+    void onTransactions(List<String> payloads) {
+        List<Transaction> valid = new ArrayList<>(payloads.size());
+        for (int i = 0; i < payloads.size(); i++) {
+            try {
+                valid.add(toDomain(payloads.get(i)));
+            } catch (InvalidEventException e) {
+                if (!valid.isEmpty()) {
+                    service.scoreBatch(valid);
+                }
+                throw new BatchListenerFailedException("Invalid record in batch", e, i);
+            }
+        }
+        service.scoreBatch(valid);
     }
 
     private Transaction toDomain(String payload) {

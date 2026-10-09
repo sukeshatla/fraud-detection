@@ -4,6 +4,22 @@ spring:
   threads:
     virtual:
       enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/fraud}
+    username: ${DB_USER:fraud}
+    password: ${DB_PASSWORD:fraud-local-only}
+    hikari:
+      schema: scoring                 # search_path: this service only sees its own schema
+      # Pool sizing ≈ cores × 2 (+ effective spindles). Throwing more connections at Postgres
+      # adds lock/context-switch contention, not throughput. Virtual threads do NOT change this.
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 2000      # fail fast instead of queueing forever
+      data-source-properties:
+        reWriteBatchedInserts: true # driver turns N single-row INSERTs into multi-row VALUES
+  flyway:
+    schemas: scoring                # created if missing; migrations in db/migration
+    default-schema: scoring
   data:
     redis:
       host: ${REDIS_HOST:localhost}

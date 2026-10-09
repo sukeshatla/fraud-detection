@@ -4,10 +4,13 @@ import static com.fraudplatform.scoring.domain.TransactionBuilder.aTransaction;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -18,15 +21,18 @@ import com.fraudplatform.scoring.domain.RiskAssessment;
 import com.fraudplatform.scoring.domain.RuleEngine;
 import com.fraudplatform.scoring.domain.RuleHit;
 import com.fraudplatform.scoring.domain.Transaction;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -43,82 +49,99 @@ class ScoreTransactionServiceTest {
     private AccountActivityStore activityStore;
 
     @Mock
+    private AssessmentRepository repository;
+
+    @Mock
     private AlertPublisher alerts;
 
-    private final Transaction tx = aTransaction().build();
+    private ScoreTransactionService service;
 
-    private ScoreTransactionService serviceWithRuleWeight(int weight) {
-        FraudRule rule = new FraudRule() {
-            @Override
-            public String code() {
-                return "TEST";
-            }
+    /** Test rule: amounts ≥ 1000 score 80 (DECLINE), everything else 0 (APPROVE). */
+    private static final FraudRule BIG_IS_BAD = new FraudRule() {
+        @Override
+        public String code() {
+            return "BIG";
+        }
 
-            @Override
-            public Optional<RuleHit> evaluate(Transaction t, AccountActivity a) {
-                return weight == 0 ? Optional.empty() : Optional.of(new RuleHit("TEST", weight, "test"));
-            }
-        };
-        return new ScoreTransactionService(processed, activityStore, new RuleEngine(List.of(rule)), alerts,
-                Clock.fixed(NOW, ZoneOffset.UTC));
-    }
+        @Override
+        public Optional<RuleHit> evaluate(Transaction t, AccountActivity a) {
+            return t.amount().compareTo(new BigDecimal("1000")) >= 0 ? Optional.of(new RuleHit("BIG", 80, "big")) : Optional.empty();
+        }
+    };
+
+    private final Transaction risky = aTransaction().eventId(UUID.randomUUID()).transactionId("t-risky").amount("5000").build();
+    private final Transaction clean = aTransaction().eventId(UUID.randomUUID()).transactionId("t-clean").amount("10").build();
 
     @BeforeEach
-    void freshEvent() {
-        given(processed.isProcessed(tx.eventId())).willReturn(false);
+    void setUp() {
+        service = new ScoreTransactionService(processed, activityStore, new RuleEngine(List.of(BIG_IS_BAD)), repository, alerts,
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        lenient().when(activityStore.recordAndGet(any())).thenReturn(AccountActivity.none());
     }
 
     @Test
-    @DisplayName("AC-003-10: REVIEW/DECLINE publishes an alert carrying score, decision and hits")
-    void publishesAlertForRiskyTransaction() {
-        given(activityStore.recordAndGet(tx)).willReturn(AccountActivity.none());
+    @DisplayName("AC-004-02: the whole batch is persisted with ONE repository call")
+    void persistsBatchOnce() {
+        List<RiskAssessment> result = service.scoreBatch(List.of(risky, clean));
 
-        RiskAssessment assessment = serviceWithRuleWeight(80).score(tx).orElseThrow();
-
-        assertThat(assessment.decision()).isEqualTo(Decision.DECLINE);
-        assertThat(assessment.riskScore()).isEqualTo(80);
-        assertThat(assessment.scoredAt()).isEqualTo(NOW);
-        verify(alerts).publish(assessment);
+        assertThat(result).extracting(RiskAssessment::decision).containsExactly(Decision.DECLINE, Decision.APPROVE);
+        verify(repository, times(1)).saveAll(result);
     }
 
     @Test
-    @DisplayName("AC-003-10: APPROVE raises no alert")
-    void noAlertForCleanTransaction() {
-        given(activityStore.recordAndGet(tx)).willReturn(AccountActivity.none());
+    @DisplayName("AC-003-10: only REVIEW/DECLINE assessments raise alerts")
+    void alertsOnlyForRisky() {
+        service.scoreBatch(List.of(risky, clean));
 
-        assertThat(serviceWithRuleWeight(0).score(tx)).get().extracting(RiskAssessment::decision).isEqualTo(Decision.APPROVE);
-        verify(alerts, never()).publish(any());
+        ArgumentCaptor<RiskAssessment> captor = ArgumentCaptor.forClass(RiskAssessment.class);
+        verify(alerts).publish(captor.capture());
+        assertThat(captor.getValue().transaction()).isEqualTo(risky);
+        assertThat(captor.getValue().scoredAt()).isEqualTo(NOW);
     }
 
     @Test
-    @DisplayName("AC-003-08: already-processed eventId is skipped entirely")
-    void skipsDuplicateDelivery() {
-        given(processed.isProcessed(tx.eventId())).willReturn(true);
+    @DisplayName("AC-003-08: already-processed events are skipped; nothing to do → no DB call")
+    void skipsProcessed() {
+        given(processed.isProcessed(risky.eventId())).willReturn(true);
 
-        assertThat(serviceWithRuleWeight(80).score(tx)).isEmpty();
-        verifyNoInteractions(activityStore, alerts);
+        assertThat(service.scoreBatch(List.of(risky))).isEmpty();
+        verifyNoInteractions(activityStore, repository, alerts);
     }
 
     @Test
-    @DisplayName("AC-003-08: event is marked processed only AFTER the alert is published (at-least-once)")
-    void marksProcessedAfterSideEffects() {
-        given(activityStore.recordAndGet(tx)).willReturn(AccountActivity.none());
+    @DisplayName("AC-003-08: the same eventId twice in one batch is scored once")
+    void dedupesWithinBatch() {
+        assertThat(service.scoreBatch(List.of(risky, risky))).hasSize(1);
+        verify(alerts, times(1)).publish(any());
+    }
 
-        serviceWithRuleWeight(80).score(tx);
+    @Test
+    @DisplayName("Order: persist → alert → mark processed (at-least-once, idempotent replays)")
+    void ordering() {
+        service.scoreBatch(List.of(risky));
 
-        InOrder order = inOrder(activityStore, alerts, processed);
-        order.verify(activityStore).recordAndGet(tx);
+        InOrder order = inOrder(repository, alerts, processed);
+        order.verify(repository).saveAll(anyList());
         order.verify(alerts).publish(any());
-        order.verify(processed).markProcessed(tx.eventId());
+        order.verify(processed).markProcessed(risky.eventId());
     }
 
     @Test
-    @DisplayName("AC-003-08: failure before completion leaves the event unmarked so redelivery retries it")
-    void doesNotMarkOnFailure() {
-        given(activityStore.recordAndGet(tx)).willReturn(AccountActivity.none());
+    @DisplayName("DB failure → no alerts, nothing marked; the whole poll is redelivered")
+    void dbFailureStopsTheBatch() {
+        doThrow(new IllegalStateException("db down")).when(repository).saveAll(anyList());
+
+        assertThatThrownBy(() -> service.scoreBatch(List.of(risky))).isInstanceOf(IllegalStateException.class);
+        verify(alerts, never()).publish(any());
+        verify(processed, never()).markProcessed(any());
+    }
+
+    @Test
+    @DisplayName("Alert failure → events not marked processed, so redelivery retries them")
+    void alertFailureLeavesEventsUnmarked() {
         doThrow(new IllegalStateException("kafka down")).when(alerts).publish(any());
 
-        assertThatThrownBy(() -> serviceWithRuleWeight(80).score(tx)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> service.scoreBatch(List.of(risky))).isInstanceOf(IllegalStateException.class);
         verify(processed, never()).markProcessed(any());
     }
 }

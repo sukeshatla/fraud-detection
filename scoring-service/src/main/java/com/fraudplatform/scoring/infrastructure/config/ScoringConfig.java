@@ -2,7 +2,9 @@ package com.fraudplatform.scoring.infrastructure.config;
 
 import com.fraudplatform.contracts.Topics;
 import com.fraudplatform.scoring.application.AccountActivityStore;
+import com.fraudplatform.scoring.application.AccountHistoryService;
 import com.fraudplatform.scoring.application.AlertPublisher;
+import com.fraudplatform.scoring.application.AssessmentRepository;
 import com.fraudplatform.scoring.application.ProcessedEventStore;
 import com.fraudplatform.scoring.application.ScoreTransactionService;
 import com.fraudplatform.scoring.domain.FraudRule;
@@ -13,6 +15,7 @@ import com.fraudplatform.scoring.domain.rules.HighAmountRule;
 import com.fraudplatform.scoring.domain.rules.HighRiskMccRule;
 import com.fraudplatform.scoring.domain.rules.VelocityRule;
 import com.fraudplatform.scoring.infrastructure.kafka.KafkaAlertPublisher;
+import com.fraudplatform.scoring.infrastructure.persistence.JdbcAssessmentRepository;
 import com.fraudplatform.scoring.infrastructure.redis.RedisAccountActivityStore;
 import com.fraudplatform.scoring.infrastructure.redis.RedisProcessedEventStore;
 import java.time.Clock;
@@ -21,8 +24,10 @@ import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.config.TopicBuilder;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Composition root for scoring: rules, engine, use case and adapters. */
@@ -81,9 +86,19 @@ class ScoringConfig {
     }
 
     @Bean
+    JdbcAssessmentRepository assessmentRepository(JdbcTemplate jdbc, TransactionTemplate tx) {
+        return new JdbcAssessmentRepository(jdbc, tx);
+    }
+
+    @Bean
+    AccountHistoryService accountHistoryService(JdbcAssessmentRepository repository) {
+        return new AccountHistoryService(repository);
+    }
+
+    @Bean
     ScoreTransactionService scoreTransactionService(ProcessedEventStore processed, AccountActivityStore activity,
-            RuleEngine engine, AlertPublisher alerts, Clock clock) {
-        return new ScoreTransactionService(processed, activity, engine, alerts, clock);
+            RuleEngine engine, AssessmentRepository repository, AlertPublisher alerts, Clock clock) {
+        return new ScoreTransactionService(processed, activity, engine, repository, alerts, clock);
     }
 
     @Bean
