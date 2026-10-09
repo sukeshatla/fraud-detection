@@ -1,9 +1,10 @@
 package com.fraudplatform.ingestion.infrastructure.redis;
 
+import com.fraudplatform.testing.Containers;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fraudplatform.ingestion.application.RateLimitDecision;
-import com.fraudplatform.ingestion.support.RedisTestSupport;
+import com.fraudplatform.testing.RedisTestSupport;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.util.List;
@@ -26,7 +27,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class RedisTokenBucketRateLimiterIT {
 
     @Container
-    static final GenericContainer<?> REDIS = RedisTestSupport.redisContainer();
+    static final GenericContainer<?> REDIS = Containers.redis();
 
     private static StringRedisTemplate redis;
 

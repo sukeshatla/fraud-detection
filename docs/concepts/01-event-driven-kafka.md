@@ -1,6 +1,6 @@
 # 01 · Event-driven decoupling with Kafka
 
-> **Status:** ✅ Producer side implemented in [Feature 001](../../specs/001-transaction-ingestion/spec.md) · consumer side in [Feature 003](../../specs/003-rule-based-scoring/spec.md)
+> **Status:** ✅ Producer side in [Feature 001](../../specs/001-transaction-ingestion/spec.md) · ✅ consumer side, DLT and dedupe in [Feature 003](../../specs/003-rule-based-scoring/spec.md)
 > **Code:** [`KafkaTransactionPublisher`](../../ingestion-service/src/main/java/com/fraudplatform/ingestion/infrastructure/kafka/KafkaTransactionPublisher.java), [`application.yml`](../../ingestion-service/src/main/resources/application.yml), [`TransactionIngestionIT`](../../ingestion-service/src/test/java/com/fraudplatform/ingestion/TransactionIngestionIT.java)
 
 ## TL;DR
@@ -66,6 +66,11 @@ flowchart TB
 3. The request thread **blocks on the broker ack** (`future.get(timeout)`). It's a virtual thread, so that is cheap ([concept 07](07-virtual-threads.md)).
 4. No ack within 5 s → `503 + Retry-After`. The client never gets `202` for something that isn't durable.
 5. `TransactionIngestionIT` proves against a real broker that 10 events for one account land on one partition in order.
+
+### Consumer side (Feature 003)
+- [`TransactionReceivedListener`](../../scoring-service/src/main/java/com/fraudplatform/scoring/api/TransactionReceivedListener.java): group `scoring`, `concurrency` threads per instance, `CooperativeStickyAssignor`.
+- [`KafkaErrorHandlingConfig`](../../scoring-service/src/main/java/com/fraudplatform/scoring/infrastructure/config/KafkaErrorHandlingConfig.java): poison pills go **straight to `transactions.received.v1.DLT`**, while transient errors retry first.
+- [`ScoringPipelineIT`](../../scoring-service/src/test/java/com/fraudplatform/scoring/ScoringPipelineIT.java) proves three things: a burst produces an alert, a duplicate delivery produces exactly one alert, and a poison pill goes to the DLT while the partition keeps flowing.
 
 ## Pitfalls
 - **Hot partitions:** one huge merchant as a key overloads one partition. Pick keys with high cardinality and even distribution.

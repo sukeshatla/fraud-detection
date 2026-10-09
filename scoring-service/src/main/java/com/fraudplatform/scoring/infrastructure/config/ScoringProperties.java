@@ -1,0 +1,35 @@
+package com.fraudplatform.scoring.infrastructure.config;
+
+import com.fraudplatform.contracts.Topics;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.util.Map;
+import java.util.Set;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.DefaultValue;
+
+/** {@code fraud.scoring.*}: every rule threshold is tunable per environment. */
+@ConfigurationProperties("fraud.scoring")
+public record ScoringProperties(
+        @DefaultValue(Topics.FRAUD_ALERTS) String alertTopic,
+        @DefaultValue("12") int partitions,
+        @DefaultValue("1") short replicationFactor,
+        @DefaultValue("5s") Duration publishTimeout,
+        @DefaultValue("7d") Duration processedTtl,
+        @DefaultValue("24h") Duration activityRetention,
+        @DefaultValue Rules rules) {
+
+    public record Rules(
+            @DefaultValue("5000") BigDecimal highAmountUsd,
+            Map<String, BigDecimal> usdRates,
+            @DefaultValue("5") int velocityMaxPerMinute,
+            @DefaultValue("1h") Duration geoVelocityWindow,
+            @DefaultValue({"7995", "6051", "4829", "6211"}) Set<String> highRiskMccs,
+            @DefaultValue("2.00") BigDecimal cardTestingAmount,
+            @DefaultValue("3") int cardTestingMinCount) {
+
+        public Rules {
+            usdRates = usdRates == null ? Map.of() : Map.copyOf(usdRates);
+        }
+    }
+}
