@@ -4,6 +4,12 @@ spring:
   threads:
     virtual:
       enabled: true          # Tomcat request handling on virtual threads (ADR-0004)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 200ms           # fail fast → limiter fails open instead of stalling requests
+      connect-timeout: 1s
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
@@ -37,3 +43,14 @@ fraud:
     replication-factor: 1
     publish-timeout: 5s
     max-clock-skew: 5m
+    rate-limit:
+      enabled: true
+      default-quota:
+        capacity: 200            # burst
+        refill-per-second: 100   # sustained rps per client
+      clients:
+        gw-premium:
+          capacity: 2000
+          refill-per-second: 1000
+    idempotency:
+      ttl: 24h

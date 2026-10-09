@@ -5,6 +5,7 @@ import com.fraudplatform.ingestion.domain.Transaction;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 
 /**
  * Use case: accept a transaction for fraud scoring.
@@ -15,26 +16,68 @@ import java.time.Instant;
 public class IngestTransactionService {
 
     private final TransactionPublisher publisher;
+    private final IdempotencyStore idempotency;
     private final Clock clock;
     private final EventIdGenerator eventIds;
     private final Duration maxClockSkew;
 
     public IngestTransactionService(
-            TransactionPublisher publisher, Clock clock, EventIdGenerator eventIds, Duration maxClockSkew) {
+            TransactionPublisher publisher,
+            IdempotencyStore idempotency,
+            Clock clock,
+            EventIdGenerator eventIds,
+            Duration maxClockSkew) {
         this.publisher = publisher;
+        this.idempotency = idempotency;
         this.clock = clock;
         this.eventIds = eventIds;
         this.maxClockSkew = maxClockSkew;
     }
 
-    public IngestionReceipt ingest(Transaction transaction) {
+    /**
+     * @param idempotencyKey optional client-supplied key; when present, retries return the original
+     *                       receipt instead of publishing again
+     */
+    public IngestionReceipt ingest(Transaction transaction, String idempotencyKey) {
+        if (idempotencyKey == null) {
+            return publish(transaction);
+        }
+
+        String fingerprint = transaction.fingerprint();
+        Optional<IdempotencyRecord> existing = idempotency.claim(idempotencyKey, fingerprint);
+        if (existing.isPresent()) {
+            return replay(existing.get(), idempotencyKey, fingerprint);
+        }
+
+        IngestionReceipt receipt;
+        try {
+            receipt = publish(transaction);
+        } catch (RuntimeException e) {
+            idempotency.release(idempotencyKey);
+            throw e;
+        }
+        idempotency.complete(idempotencyKey, IdempotencyRecord.completed(fingerprint, receipt));
+        return receipt;
+    }
+
+    private IngestionReceipt publish(Transaction transaction) {
         Instant receivedAt = clock.instant();
         rejectIfFromTheFuture(transaction, receivedAt);
 
         ReceivedTransaction received = new ReceivedTransaction(eventIds.next(), receivedAt, transaction);
         publisher.publish(received);
 
-        return new IngestionReceipt(transaction.transactionId(), received.eventId(), receivedAt);
+        return new IngestionReceipt(transaction.transactionId(), received.eventId(), receivedAt, false);
+    }
+
+    private static IngestionReceipt replay(IdempotencyRecord record, String key, String fingerprint) {
+        if (!record.fingerprint().equals(fingerprint)) {
+            throw new IdempotencyKeyReusedException(key);
+        }
+        return switch (record.status()) {
+            case IN_PROGRESS -> throw new IdempotentRequestInProgressException(key);
+            case COMPLETED -> record.receipt().asReplay();
+        };
     }
 
     private void rejectIfFromTheFuture(Transaction transaction, Instant now) {
