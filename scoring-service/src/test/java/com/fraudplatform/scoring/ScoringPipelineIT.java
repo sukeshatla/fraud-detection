@@ -113,6 +113,23 @@ class ScoringPipelineIT {
         assertThat(riskApi.riskOf(account).isHighRisk()).isFalse();
     }
 
+    @Test
+    @DisplayName("AC-007-09: an analyst's FALSE_POSITIVE (alert-resolutions topic) clears the account in scoring")
+    void falsePositiveResolutionClearsAccount() throws Exception {
+        String account = uniqueAccount();
+        send(eventIn(account, "10.00", "5411", "US", Instant.now().minusSeconds(60)));
+        send(eventIn(account, "9000.00", "7995", "MT", Instant.now()));
+        alertWithRule(account, "GEO_VELOCITY");
+        assertThat(riskApi.riskOf(account).isHighRisk()).isTrue();
+
+        var resolved = new com.fraudplatform.contracts.events.AlertResolvedEvent(1, UUID.randomUUID(), UUID.randomUUID(),
+                "txn-x", account, "FALSE_POSITIVE", "analyst-1", Instant.now());
+        kafkaTemplate.send(Topics.ALERT_RESOLUTIONS, account, mapper.writeValueAsString(resolved)).get();
+
+        org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(30))
+                .until(() -> !riskApi.riskOf(account).isHighRisk());
+    }
+
     private void send(TransactionReceivedEvent event) throws Exception {
         kafkaTemplate.send(Topics.TRANSACTIONS_RECEIVED, event.accountId(), mapper.writeValueAsString(event)).get();
     }

@@ -1,6 +1,7 @@
 # 05 · Two-layer concurrent-write protection
 
-> **Status:** 📝 Planned: [Feature 007](../../specs/007-alert-management/spec.md)
+> **Status:** ✅ Implemented in [Feature 007](../../specs/007-alert-management/spec.md)
+> **Code:** [`ReviewAlertService`](../../alert-service/src/main/java/com/fraudplatform/alerts/application/ReviewAlertService.java), [`RedisAlertLock`](../../alert-service/src/main/java/com/fraudplatform/alerts/infrastructure/redis/RedisAlertLock.java), [`JpaAlertRepository.transition`](../../alert-service/src/main/java/com/fraudplatform/alerts/infrastructure/persistence/JpaAlertRepository.java), [`AlertConcurrencyIT`](../../alert-service/src/test/java/com/fraudplatform/alerts/AlertConcurrencyIT.java)
 
 ## The problem: lost updates
 ```
@@ -47,6 +48,23 @@ end
 - The token is a random UUID per acquisition.
 - Lock TTL > p99 of the critical section. Keep critical sections short (no remote calls inside).
 - The client sends `version` (or an `If-Match` ETag header), which gives HTTP-level optimistic concurrency.
+
+## Proven by tests
+| Test | Setup | Result |
+|------|-------|--------|
+| `fiftyConcurrentPatches` | 50 virtual threads, `CountDownLatch` start gate, real HTTP stack, Redis, PostgreSQL | exactly **1 × 200**, **49 × 409**, **1** audit row, version 0 → 1 |
+| `layerTwoHoldsWithoutLock` | Same race with the Redis lock **replaced by a no-op** (simulating an expired lease) | still exactly **1** winner; 49 × `StaleAlertException` |
+| `expiredHolderCannotReleaseNewOwner` | Holder's lease expires, a new holder acquires, then the old holder "releases" | new holder's lock survives (compare-and-delete) |
+
+### Why the second test matters
+Under READ COMMITTED, two transactions can both read `version = 0`. The first `UPDATE … WHERE version = 0` takes the row lock. The second blocks, then re-evaluates its `WHERE` against the committed row (`version = 1`), matches **0 rows**, and Hibernate raises `OptimisticLockException`. The audit insert of the loser is rolled back with it. Hibernate flushes inserts before updates, but it's all one transaction.
+
+### Three distinct 409s
+| `type` | Meaning | UI reaction |
+|--------|---------|-------------|
+| `alert-locked` | Someone is saving right now | Retry in a moment |
+| `stale-version` | You looked at an old copy (`current` included in the body) | Show "updated by someone else" and refresh |
+| `invalid-transition` | Workflow doesn't allow it | Disable the action |
 
 ## Optimistic vs pessimistic locking
 

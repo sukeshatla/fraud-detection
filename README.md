@@ -31,9 +31,9 @@ flowchart LR
 |---------|-----------|---------|
 | Event-driven decoupling with Kafka | [01](docs/concepts/01-event-driven-kafka.md) | ✅ 001 · ✅ 003 |
 | Distributed caching with Redis | [02](docs/concepts/02-distributed-caching-redis.md) | ✅ 005 |
-| N+1 queries and composite indexing | [03](docs/concepts/03-n-plus-one-and-composite-indexing.md) | ✅ 004 · 007 |
+| N+1 queries and composite indexing | [03](docs/concepts/03-n-plus-one-and-composite-indexing.md) | ✅ 004 · ✅ 007 |
 | JDBC batch processing | [04](docs/concepts/04-jdbc-batch-processing.md) | ✅ 004 |
-| Two-layer concurrent-write protection | [05](docs/concepts/05-two-layer-concurrent-write-protection.md) | 007 |
+| Two-layer concurrent-write protection | [05](docs/concepts/05-two-layer-concurrent-write-protection.md) | ✅ 007 |
 | Distributed rate limiting | [06](docs/concepts/06-distributed-rate-limiting.md) | ✅ 002 |
 | JDK 21 virtual threads | [07](docs/concepts/07-virtual-threads.md) | ✅ 001 · 009 |
 | Threads, semaphores, locks, CompletableFuture | [08](docs/concepts/08-concurrency-primitives.md) | ✅ 005 · 006 · 009 |
@@ -67,7 +67,7 @@ flowchart LR
 | 004 | Persistence: JDBC batch, indexes | ✅ |
 | 005 | High-risk account cache | ✅ |
 | 006 | ML-assisted scoring | ✅ |
-| 007 | Alert management API | 📝 |
+| 007 | Alert management API | ✅ |
 | 008 | React dashboard | 📝 |
 | 009 | Concurrency deep dive | 📝 |
 | 010 | Resilience | 📝 |
@@ -93,6 +93,7 @@ docker compose -f infra/docker-compose.yml up -d
 # 3. Run the services (separate terminals)
 ./mvnw -pl ingestion-service spring-boot:run
 ./mvnw -pl scoring-service spring-boot:run
+./mvnw -pl alert-service spring-boot:run
 
 # 4. Submit a transaction
 curl -i -X POST localhost:8081/api/v1/transactions \
@@ -134,6 +135,7 @@ docker compose -f infra/docker-compose.yml --profile tools up -d kafka-ui
 │       └── infrastructure/ Kafka adapter, wiring, config
 ├── scoring-service/        Kafka → rules → Postgres (JDBC batch) → fraud.alerts.v1, risk cache (003–005)
 ├── ml/                     Model training (Python): synthetic data → logistic regression → JSON (006)
+├── alert-service/          Analyst queue: Kafka → JPA, keyset paging, Redis lock + @Version (007)
 ├── infra/                  docker-compose for local infrastructure
 ├── docs/
 │   ├── constitution.md     engineering rules & Definition of Done

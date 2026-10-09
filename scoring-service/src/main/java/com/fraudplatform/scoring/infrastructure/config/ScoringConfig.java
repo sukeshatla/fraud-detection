@@ -159,6 +159,11 @@ class ScoringConfig {
     }
 
     @Bean
+    NewTopic alertResolutionsTopic(ScoringProperties props) {
+        return TopicBuilder.name(Topics.ALERT_RESOLUTIONS).partitions(6).replicas(props.replicationFactor()).build();
+    }
+
+    @Bean
     NewTopic fraudAlertsTopic(ScoringProperties props) {
         return TopicBuilder.name(props.alertTopic()).partitions(6).replicas(props.replicationFactor()).build();
     }
