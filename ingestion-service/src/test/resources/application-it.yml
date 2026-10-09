@@ -1,0 +1,8 @@
+# Shared by every @IntegrationTest so they all reuse ONE cached Spring context (and one set of containers).
+fraud:
+  ingestion:
+    rate-limit:
+      clients:
+        it-limited:            # used by IngestionEdgeIT to exercise 429s
+          capacity: 2
+          refill-per-second: 0.001

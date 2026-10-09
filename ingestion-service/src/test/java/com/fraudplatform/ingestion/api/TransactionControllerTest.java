@@ -2,13 +2,18 @@ package com.fraudplatform.ingestion.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.fraudplatform.ingestion.application.EventPublishingException;
 import com.fraudplatform.ingestion.application.IngestTransactionService;
+import com.fraudplatform.ingestion.application.IdempotencyKeyReusedException;
+import com.fraudplatform.ingestion.application.IdempotentRequestInProgressException;
 import com.fraudplatform.ingestion.application.IngestionReceipt;
+import com.fraudplatform.ingestion.application.RateLimitDecision;
+import com.fraudplatform.ingestion.application.RateLimiter;
 import com.fraudplatform.ingestion.application.TransactionRejectedException;
 import com.fraudplatform.ingestion.domain.Channel;
 import com.fraudplatform.ingestion.domain.Money;
@@ -17,6 +22,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Currency;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,10 +60,18 @@ class TransactionControllerTest {
     @MockitoBean
     private IngestTransactionService service;
 
+    @MockitoBean
+    private RateLimiter rateLimiter;
+
+    @BeforeEach
+    void allowAllTraffic() {
+        given(rateLimiter.tryAcquire(any())).willReturn(RateLimitDecision.allowed(100, 99));
+    }
+
     @Test
     @DisplayName("AC-001-01: valid transaction → 202 with transactionId, eventId, status, receivedAt")
     void acceptsValidTransaction() {
-        given(service.ingest(any())).willReturn(new IngestionReceipt("txn-7f3a9c", EVENT_ID, RECEIVED_AT));
+        given(service.ingest(any(), any())).willReturn(new IngestionReceipt("txn-7f3a9c", EVENT_ID, RECEIVED_AT, false));
 
         MvcTestResult result = post(VALID_JSON);
 
@@ -71,7 +85,7 @@ class TransactionControllerTest {
     @Test
     @DisplayName("AC-001-01: request is mapped to the domain transaction unchanged")
     void mapsRequestToDomain() {
-        given(service.ingest(any())).willReturn(new IngestionReceipt("txn-7f3a9c", EVENT_ID, RECEIVED_AT));
+        given(service.ingest(any(), any())).willReturn(new IngestionReceipt("txn-7f3a9c", EVENT_ID, RECEIVED_AT, false));
 
         post(VALID_JSON);
 
@@ -83,7 +97,7 @@ class TransactionControllerTest {
                 "5732",
                 "US",
                 Channel.CARD_NOT_PRESENT,
-                Instant.parse("2026-10-09T18:15:30Z")));
+                Instant.parse("2026-10-09T18:15:30Z")), null);
     }
 
     @Test
@@ -161,7 +175,7 @@ class TransactionControllerTest {
     @Test
     @DisplayName("AC-001-05: business-rule rejection → 400 transaction-rejected")
     void mapsBusinessRejection() {
-        given(service.ingest(any())).willThrow(new TransactionRejectedException("occurredAt is in the future"));
+        given(service.ingest(any(), any())).willThrow(new TransactionRejectedException("occurredAt is in the future"));
 
         MvcTestResult result = post(VALID_JSON);
 
@@ -183,13 +197,58 @@ class TransactionControllerTest {
     @Test
     @DisplayName("AC-001-06: broker not acknowledging → 503 with Retry-After")
     void mapsPublishFailureToServiceUnavailable() {
-        given(service.ingest(any())).willThrow(new EventPublishingException("timeout", null));
+        given(service.ingest(any(), any())).willThrow(new EventPublishingException("timeout", null));
 
         MvcTestResult result = post(VALID_JSON);
 
         assertThat(result).hasStatus(HttpStatus.SERVICE_UNAVAILABLE);
         assertThat(result).hasHeader("Retry-After", "1");
         assertThat(result).bodyJson().extractingPath("$.type").asString().endsWith("publish-failed");
+    }
+
+    @Test
+    @DisplayName("AC-002-05: Idempotency-Key is passed to the use case; replays are flagged with a header")
+    void flagsIdempotentReplay() {
+        given(service.ingest(any(), eq("key-1"))).willReturn(new IngestionReceipt("txn-7f3a9c", EVENT_ID, RECEIVED_AT, true));
+
+        MvcTestResult result = mvc.post().uri(URL).contentType(MediaType.APPLICATION_JSON)
+                .header("Idempotency-Key", "key-1").content(VALID_JSON).exchange();
+
+        assertThat(result).hasStatus(HttpStatus.ACCEPTED);
+        assertThat(result).hasHeader("Idempotent-Replayed", "true");
+        assertThat(result).bodyJson().extractingPath("$.eventId").isEqualTo(EVENT_ID.toString());
+    }
+
+    @Test
+    @DisplayName("AC-002-06: same key, different body → 422 idempotency-key-reused")
+    void mapsKeyReuse() {
+        given(service.ingest(any(), any())).willThrow(new IdempotencyKeyReusedException("key-1"));
+
+        MvcTestResult result = post(VALID_JSON);
+
+        assertThat(result).hasStatus(HttpStatus.UNPROCESSABLE_CONTENT);
+        assertThat(result).bodyJson().extractingPath("$.type").asString().endsWith("idempotency-key-reused");
+    }
+
+    @Test
+    @DisplayName("AC-002-07: same key still in flight → 409 idempotency-in-progress")
+    void mapsInFlightDuplicate() {
+        given(service.ingest(any(), any())).willThrow(new IdempotentRequestInProgressException("key-1"));
+
+        MvcTestResult result = post(VALID_JSON);
+
+        assertThat(result).hasStatus(HttpStatus.CONFLICT);
+        assertThat(result).bodyJson().extractingPath("$.type").asString().endsWith("idempotency-in-progress");
+    }
+
+    @Test
+    @DisplayName("Idempotency-Key longer than 255 chars → 400")
+    void rejectsOversizedIdempotencyKey() {
+        MvcTestResult result = mvc.post().uri(URL).contentType(MediaType.APPLICATION_JSON)
+                .header("Idempotency-Key", "k".repeat(256)).content(VALID_JSON).exchange();
+
+        assertThat(result).hasStatus(HttpStatus.BAD_REQUEST);
+        verifyNoInteractions(service);
     }
 
     private MvcTestResult post(String body) {

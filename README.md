@@ -34,7 +34,7 @@ flowchart LR
 | N+1 queries and composite indexing | [03](docs/concepts/03-n-plus-one-and-composite-indexing.md) | 004 · 007 |
 | JDBC batch processing | [04](docs/concepts/04-jdbc-batch-processing.md) | 004 |
 | Two-layer concurrent-write protection | [05](docs/concepts/05-two-layer-concurrent-write-protection.md) | 007 |
-| Distributed rate limiting | [06](docs/concepts/06-distributed-rate-limiting.md) | 002 |
+| Distributed rate limiting | [06](docs/concepts/06-distributed-rate-limiting.md) | ✅ 002 |
 | JDK 21 virtual threads | [07](docs/concepts/07-virtual-threads.md) | ✅ 001 · 009 |
 | Threads, semaphores, locks, CompletableFuture | [08](docs/concepts/08-concurrency-primitives.md) | 006 · 009 |
 | Load testing with Gatling | [09](docs/concepts/09-load-testing-gatling.md) | 013 |
@@ -61,7 +61,7 @@ flowchart LR
 |---|---------|--------|
 | 000 | Project foundation | ✅ |
 | 001 | Transaction ingestion API → Kafka | ✅ |
-| 002 | Distributed rate limiting & idempotency | 📝 |
+| 002 | Distributed rate limiting & idempotency | ✅ |
 | 003 | Rule-based scoring engine | 📝 |
 | 004 | Persistence: JDBC batch, indexes | 📝 |
 | 005 | High-risk account cache | 📝 |
@@ -95,6 +95,8 @@ docker compose -f infra/docker-compose.yml up -d
 # 4. Submit a transaction
 curl -i -X POST localhost:8081/api/v1/transactions \
   -H 'Content-Type: application/json' \
+  -H 'X-Client-Id: gw-1' \
+  -H "Idempotency-Key: $(uuidgen)" \
   -d '{
         "transactionId": "txn-0001",
         "accountId": "acc-1001",

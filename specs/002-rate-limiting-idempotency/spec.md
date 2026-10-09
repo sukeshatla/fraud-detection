@@ -2,7 +2,7 @@
 
 | Field    | Value |
 |----------|-------|
-| Status   | Spec |
+| Status   | Implemented |
 | Depends  | 001 |
 | Concepts | [Distributed rate limiting](../../docs/concepts/06-distributed-rate-limiting.md), [Idempotency](../../docs/concepts/12-idempotency-and-exactly-once.md) |
 

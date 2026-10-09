@@ -1,6 +1,6 @@
 # 12 · Idempotency & "exactly-once"
 
-> **Status:** 📝 Planned: [Feature 002](../../specs/002-rate-limiting-idempotency/spec.md) (API idempotency keys), [Feature 003](../../specs/003-rule-based-scoring/spec.md) (consumer dedupe), [Feature 004](../../specs/004-persistence-jdbc-batch/spec.md) (`ON CONFLICT`)
+> **Status:** ✅ API keys in [Feature 002](../../specs/002-rate-limiting-idempotency/spec.md) (API idempotency keys), [Feature 003](../../specs/003-rule-based-scoring/spec.md) (consumer dedupe), [Feature 004](../../specs/004-persistence-jdbc-batch/spec.md) (`ON CONFLICT`)
 
 ## The core truth
 Over an unreliable network you get **at-most-once** (may lose) or **at-least-once** (may duplicate). "Exactly-once" in practice means **at-least-once delivery + idempotent processing**.
@@ -17,7 +17,7 @@ flowchart LR
 
 | # | Duplicate source | Defence |
 |---|------------------|---------|
-| ① | Client didn't get our `202` and retries | `Idempotency-Key` header → `SET idem:{key} NX EX 86400` → replay the original response |
+| ① | Client didn't get our `202` and retries | `Idempotency-Key` header → `SET idem:{key} NX EX 86400` → replay the original response ✅ *implemented* ([`RedisIdempotencyStore`](../../ingestion-service/src/main/java/com/fraudplatform/ingestion/infrastructure/redis/RedisIdempotencyStore.java)) |
 | ② | Producer retries after a lost ack | `enable.idempotence=true` (broker dedupes by PID + sequence) ✅ *implemented* |
 | ③ | Consumer crashed before committing the offset | Dedupe on `eventId` (`SET processed:{eventId} NX`) |
 | ④ | Same batch re-inserted | `UNIQUE(transaction_id)` + `ON CONFLICT DO NOTHING` |

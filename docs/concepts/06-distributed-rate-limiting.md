@@ -1,6 +1,7 @@
 # 06 · Distributed rate limiting
 
-> **Status:** 📝 Planned: [Feature 002](../../specs/002-rate-limiting-idempotency/spec.md)
+> **Status:** ✅ Implemented in [Feature 002](../../specs/002-rate-limiting-idempotency/spec.md)
+> **Code:** [`token_bucket.lua`](../../ingestion-service/src/main/resources/scripts/token_bucket.lua), [`RedisTokenBucketRateLimiter`](../../ingestion-service/src/main/java/com/fraudplatform/ingestion/infrastructure/redis/RedisTokenBucketRateLimiter.java), [`RateLimitInterceptor`](../../ingestion-service/src/main/java/com/fraudplatform/ingestion/api/RateLimitInterceptor.java), [`RedisTokenBucketRateLimiterIT`](../../ingestion-service/src/test/java/com/fraudplatform/ingestion/infrastructure/redis/RedisTokenBucketRateLimiterIT.java)
 
 ## Why "distributed"
 Three ingestion instances behind a load balancer, each with an in-memory limit of 100 req/s, allow **300 req/s** in total, and that number changes whenever you scale. The counter must live in one shared place: **Redis**.
@@ -19,6 +20,7 @@ Three ingestion instances behind a load balancer, each with an in-memory limit o
 Read-modify-write from Java (`GET` → compute → `SET`) **races** between instances. A Lua script runs atomically on the Redis server:
 
 ```lua
+-- Simplified; the real script (token_bucket.lua) uses Redis TIME instead of a caller clock
 -- KEYS[1]=bucket  ARGV: capacity, refill_per_ms, now_ms, requested
 local b = redis.call('HMGET', KEYS[1], 'tokens', 'ts')
 local capacity, rate, now, req = tonumber(ARGV[1]), tonumber(ARGV[2]), tonumber(ARGV[3]), tonumber(ARGV[4])
@@ -47,6 +49,15 @@ RateLimit-Reset: 1
 - **Fail open** when Redis is down. For a fraud-ingestion path, dropping legitimate payments is worse than briefly allowing excess traffic. Alert on it. (A login endpoint would fail closed.)
 - **Key by authenticated client** (from the JWT in Feature 015), never by a header the client can spoof.
 - **Layered limits:** NGINX `limit_req` (coarse, per IP, protects the fleet) + app-level per-client quota (business contract).
+
+## Proven by tests
+| Test | Proves |
+|------|--------|
+| `burstThenReject` | 200 burst allowed, the 201st rejected with `Retry-After` |
+| `atomicUnderConcurrency` | 100 virtual threads released by a `CountDownLatch` against 10 tokens → **exactly 10** succeed |
+| `quotaIsSharedAcrossInstances` | Two limiter instances (two "pods") share one quota |
+| `failsOpenWhenRedisIsDown` | Redis error → allowed + `rate_limiter_failures_total` |
+| `IngestionEdgeIT.clientOverQuotaIsThrottled` | Full HTTP path returns 429 with `RateLimit-*` headers |
 
 ## Interview questions
 <details><summary>Token bucket vs leaky bucket?</summary>

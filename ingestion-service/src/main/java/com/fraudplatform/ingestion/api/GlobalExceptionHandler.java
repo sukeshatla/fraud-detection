@@ -1,6 +1,9 @@
 package com.fraudplatform.ingestion.api;
 
 import com.fraudplatform.ingestion.application.EventPublishingException;
+import com.fraudplatform.ingestion.application.IdempotencyKeyReusedException;
+import com.fraudplatform.ingestion.application.IdempotentRequestInProgressException;
+import com.fraudplatform.ingestion.application.RateLimitDecision;
 import com.fraudplatform.ingestion.application.TransactionRejectedException;
 import com.fraudplatform.ingestion.domain.DomainValidationException;
 import java.net.URI;
@@ -67,6 +70,27 @@ class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .header(HttpHeaders.RETRY_AFTER, "1")
                 .body(problem);
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    ResponseEntity<ProblemDetail> onRateLimited(RateLimitExceededException ex) {
+        RateLimitDecision decision = ex.decision();
+        long retryAfterSeconds = Math.max(1, (decision.retryAfter().toMillis() + 999) / 1000); // round up
+        ProblemDetail problem = problem(HttpStatus.TOO_MANY_REQUESTS, "rate-limited", "Too many requests",
+                "Quota of %d requests exceeded; retry after %d s".formatted(decision.limit(), retryAfterSeconds));
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfterSeconds))
+                .body(problem);
+    }
+
+    @ExceptionHandler(IdempotentRequestInProgressException.class)
+    ProblemDetail onInProgress(IdempotentRequestInProgressException ex) {
+        return problem(HttpStatus.CONFLICT, "idempotency-in-progress", "Request in progress", ex.getMessage());
+    }
+
+    @ExceptionHandler(IdempotencyKeyReusedException.class)
+    ProblemDetail onKeyReused(IdempotencyKeyReusedException ex) {
+        return problem(HttpStatus.UNPROCESSABLE_CONTENT, "idempotency-key-reused", "Idempotency-Key reused", ex.getMessage());
     }
 
     private static ProblemDetail problem(HttpStatus status, String type, String title, String detail) {
