@@ -17,7 +17,23 @@ public record ScoringProperties(
         @DefaultValue("5s") Duration publishTimeout,
         @DefaultValue("7d") Duration processedTtl,
         @DefaultValue("24h") Duration activityRetention,
-        @DefaultValue Rules rules) {
+        @DefaultValue Rules rules,
+        @DefaultValue RiskCache riskCache) {
+
+    /**
+     * @param flagWindow how long a DECLINE keeps an account flagged (source-of-truth query)
+     * @param ttl        cache TTL for flagged accounts, ± {@code jitter}
+     * @param clearTtl   negative-cache TTL for clean accounts
+     * @param lockTtl    loader-lock lease
+     * @param lockWait   how long a non-leader instance waits for the leader's result
+     */
+    public record RiskCache(
+            @DefaultValue("24h") Duration flagWindow,
+            @DefaultValue("1h") Duration ttl,
+            @DefaultValue("5m") Duration clearTtl,
+            @DefaultValue("0.10") double jitter,
+            @DefaultValue("2s") Duration lockTtl,
+            @DefaultValue("300ms") Duration lockWait) {}
 
     public record Rules(
             @DefaultValue("5000") BigDecimal highAmountUsd,

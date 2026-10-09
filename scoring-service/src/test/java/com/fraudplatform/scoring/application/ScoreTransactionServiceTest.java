@@ -20,7 +20,10 @@ import com.fraudplatform.scoring.domain.FraudRule;
 import com.fraudplatform.scoring.domain.RiskAssessment;
 import com.fraudplatform.scoring.domain.RuleEngine;
 import com.fraudplatform.scoring.domain.RuleHit;
+import com.fraudplatform.scoring.domain.HighRiskAccount;
+import com.fraudplatform.scoring.domain.RiskStatus;
 import com.fraudplatform.scoring.domain.Transaction;
+import com.fraudplatform.scoring.domain.rules.KnownHighRiskAccountRule;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -54,6 +57,8 @@ class ScoreTransactionServiceTest {
     @Mock
     private AlertPublisher alerts;
 
+    private final FakeHighRiskAccountCache riskCache = new FakeHighRiskAccountCache();
+
     private ScoreTransactionService service;
 
     /** Test rule: amounts ≥ 1000 score 80 (DECLINE), everything else 0 (APPROVE). */
@@ -70,11 +75,12 @@ class ScoreTransactionServiceTest {
     };
 
     private final Transaction risky = aTransaction().eventId(UUID.randomUUID()).transactionId("t-risky").amount("5000").build();
-    private final Transaction clean = aTransaction().eventId(UUID.randomUUID()).transactionId("t-clean").amount("10").build();
+    private final Transaction clean = aTransaction().eventId(UUID.randomUUID()).transactionId("t-clean").accountId("acc-clean").amount("10").build();
 
     @BeforeEach
     void setUp() {
-        service = new ScoreTransactionService(processed, activityStore, new RuleEngine(List.of(BIG_IS_BAD)), repository, alerts,
+        service = new ScoreTransactionService(processed, activityStore,
+                new RuleEngine(List.of(BIG_IS_BAD, new KnownHighRiskAccountRule())), repository, riskCache, alerts,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         lenient().when(activityStore.recordAndGet(any())).thenReturn(AccountActivity.none());
     }
@@ -143,5 +149,47 @@ class ScoreTransactionServiceTest {
 
         assertThatThrownBy(() -> service.scoreBatch(List.of(risky))).isInstanceOf(IllegalStateException.class);
         verify(processed, never()).markProcessed(any());
+    }
+
+    @Test
+    @DisplayName("AC-005-02: account already flagged in the cache gets KNOWN_HIGH_RISK")
+    void flaggedAccountGetsKnownHighRisk() {
+        riskCache.put(new RiskStatus.Flagged(new HighRiskAccount(clean.accountId(), 90, "X", NOW)));
+
+        RiskAssessment assessment = service.scoreBatch(List.of(clean)).getFirst();
+
+        assertThat(assessment.hits()).extracting(RuleHit::code).containsExactly("KNOWN_HIGH_RISK");
+        assertThat(assessment.decision()).isEqualTo(Decision.REVIEW);
+    }
+
+    @Test
+    @DisplayName("AC-005-01: a DECLINE flags the account in the cache, after the DB write")
+    void declineFlagsAccountAfterPersist() {
+        service.scoreBatch(List.of(risky));
+
+        assertThat(riskCache.get(risky.accountId())).get().satisfies(status -> {
+            assertThat(status.isHighRisk()).isTrue();
+            assertThat(((RiskStatus.Flagged) status).account().riskScore()).isEqualTo(80);
+        });
+    }
+
+    @Test
+    @DisplayName("AC-005-08: a later record of a just-declined account in the SAME poll counts as high-risk")
+    void flagPropagatesWithinBatch() {
+        Transaction sameAccountLater = aTransaction().eventId(UUID.randomUUID()).transactionId("t-later")
+                .accountId(risky.accountId()).amount("10").build();
+
+        List<RiskAssessment> result = service.scoreBatch(List.of(risky, sameAccountLater));
+
+        assertThat(result.get(1).hits()).extracting(RuleHit::code).containsExactly("KNOWN_HIGH_RISK");
+    }
+
+    @Test
+    @DisplayName("AC-005-01: DB failure → the cache is NOT flagged (cache reflects committed state only)")
+    void noCacheWriteWhenPersistFails() {
+        doThrow(new IllegalStateException("db down")).when(repository).saveAll(anyList());
+
+        assertThatThrownBy(() -> service.scoreBatch(List.of(risky))).isInstanceOf(IllegalStateException.class);
+        assertThat(riskCache.get(risky.accountId())).isEmpty();
     }
 }

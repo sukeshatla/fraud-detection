@@ -1,6 +1,7 @@
 # 02 · Distributed caching with Redis
 
-> **Status:** ✅ Sliding windows in [Feature 003](../../specs/003-rule-based-scoring/spec.md) ([`account_activity.lua`](../../scoring-service/src/main/resources/scripts/account_activity.lua)) · 📝 risk cache in [Feature 005](../../specs/005-high-risk-account-cache/spec.md)
+> **Status:** ✅ Sliding windows in [Feature 003](../../specs/003-rule-based-scoring/spec.md) · ✅ high-risk account cache in [Feature 005](../../specs/005-high-risk-account-cache/spec.md)
+> **Code:** [`AccountRiskService`](../../scoring-service/src/main/java/com/fraudplatform/scoring/application/AccountRiskService.java) (cache-aside + single-flight), [`RedisHighRiskAccountCache`](../../scoring-service/src/main/java/com/fraudplatform/scoring/infrastructure/redis/RedisHighRiskAccountCache.java), [`DistributedSingleFlightIT`](../../scoring-service/src/test/java/com/fraudplatform/scoring/infrastructure/redis/DistributedSingleFlightIT.java)
 
 ## TL;DR
 An in-process cache is fast but private to one JVM, so N instances have N inconsistent copies. A **distributed cache** (Redis) is shared. Its cost is one network hop (~0.2–1 ms), but every instance sees the same "account X is high-risk" flag the moment it's set.
@@ -40,6 +41,23 @@ sequenceDiagram
 | **Stampede / dogpile** | A hot key expires and 1,000 requests miss at once, all hitting the DB | Single-flight: only one loader per key (`SET lock NX`), the others wait or serve stale |
 | **Avalanche** | Many keys share the same TTL and expire together | **TTL jitter** (±10%) |
 | **Penetration** | Requests for keys that don't exist always miss | Cache negative results briefly, or use a Bloom filter |
+
+## How this repo implements it (Feature 005)
+
+| Concern | Implementation | Proven by |
+|---------|----------------|-----------|
+| Cache-aside | `AccountRiskService.riskOf`: get → miss → load from PostgreSQL → put | `AccountRiskServiceTest.missLoadsAndPopulates` |
+| **Stampede**, one JVM | `ConcurrentHashMap<acc, CompletableFuture>`: one leader loads, followers join its future | 100 virtual threads → **1** DB load |
+| **Stampede**, many JVMs | `SET lock:risk-load:{acc} NX PX 2000`: losers poll the cache for ≤300 ms, then fall back to the DB | `DistributedSingleFlightIT`: 2 pods × 50 threads → **1** DB load |
+| **Avalanche** | TTL 1h ± 10% random jitter | `ttlsAreJittered`: 30 writes → >10 distinct TTLs |
+| **Penetration** | Clean accounts cached as `CLEAR` for 5 min | `negativeResultIsCached` |
+| Invalidation | Record the clearance in the DB **first**, then `DEL` | `clearUpdatesSourceThenEvicts` |
+| Hot-path efficiency | One pipelined `HGET` per Kafka poll for all distinct accounts | `flaggedAmongIsPipelined` |
+| Freshness within a batch | A DECLINE flags the account for later records in the same poll | `flagPropagatesWithinBatch` |
+| Observability | `cache_requests_total{result=hit|miss}`, `cache_failures_total` | `countsHitsAndMisses` |
+| Fail-soft | Every Redis error → miss / empty set / no-op, plus a metric | Redis errors never fail a request |
+
+Why "clear in the DB first, then evict"? If you only evict, the next miss reloads from the source of truth, which still says "declined 10 minutes ago", and the account is re-flagged. Invalidation must change the **source of truth**, and the cache merely follows it.
 
 ## Redis data structures we use
 

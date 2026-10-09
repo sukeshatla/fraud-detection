@@ -3,8 +3,10 @@ package com.fraudplatform.scoring.infrastructure.config;
 import com.fraudplatform.contracts.Topics;
 import com.fraudplatform.scoring.application.AccountActivityStore;
 import com.fraudplatform.scoring.application.AccountHistoryService;
+import com.fraudplatform.scoring.application.AccountRiskService;
 import com.fraudplatform.scoring.application.AlertPublisher;
 import com.fraudplatform.scoring.application.AssessmentRepository;
+import com.fraudplatform.scoring.application.HighRiskAccountCache;
 import com.fraudplatform.scoring.application.ProcessedEventStore;
 import com.fraudplatform.scoring.application.ScoreTransactionService;
 import com.fraudplatform.scoring.domain.FraudRule;
@@ -13,12 +15,17 @@ import com.fraudplatform.scoring.domain.rules.CardTestingRule;
 import com.fraudplatform.scoring.domain.rules.GeoVelocityRule;
 import com.fraudplatform.scoring.domain.rules.HighAmountRule;
 import com.fraudplatform.scoring.domain.rules.HighRiskMccRule;
+import com.fraudplatform.scoring.domain.rules.KnownHighRiskAccountRule;
 import com.fraudplatform.scoring.domain.rules.VelocityRule;
 import com.fraudplatform.scoring.infrastructure.kafka.KafkaAlertPublisher;
 import com.fraudplatform.scoring.infrastructure.persistence.JdbcAssessmentRepository;
+import com.fraudplatform.scoring.infrastructure.persistence.JdbcHighRiskAccountSource;
 import com.fraudplatform.scoring.infrastructure.redis.RedisAccountActivityStore;
+import com.fraudplatform.scoring.infrastructure.redis.RedisHighRiskAccountCache;
 import com.fraudplatform.scoring.infrastructure.redis.RedisProcessedEventStore;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.List;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.context.annotation.Bean;
@@ -64,6 +71,11 @@ class ScoringConfig {
         return new CardTestingRule(props.rules().cardTestingAmount(), props.rules().cardTestingMinCount());
     }
 
+    @Bean
+    KnownHighRiskAccountRule knownHighRiskAccountRule() {
+        return new KnownHighRiskAccountRule();
+    }
+
     /** Spring injects every {@link FraudRule} bean: a new rule is one new class + one @Bean. */
     @Bean
     RuleEngine ruleEngine(List<FraudRule> rules) {
@@ -96,9 +108,23 @@ class ScoringConfig {
     }
 
     @Bean
+    HighRiskAccountCache highRiskAccountCache(StringRedisTemplate redis, MeterRegistry meters, ScoringProperties props) {
+        ScoringProperties.RiskCache c = props.riskCache();
+        return new RedisHighRiskAccountCache(redis, meters, c.ttl(), c.clearTtl(), c.jitter(), c.lockTtl());
+    }
+
+    @Bean
+    AccountRiskService accountRiskService(HighRiskAccountCache cache, JdbcTemplate jdbc, Clock clock, ScoringProperties props) {
+        ScoringProperties.RiskCache c = props.riskCache();
+        return new AccountRiskService(cache, new JdbcHighRiskAccountSource(jdbc, clock, c.flagWindow()), clock,
+                c.lockWait(), Duration.ofMillis(20));
+    }
+
+    @Bean
     ScoreTransactionService scoreTransactionService(ProcessedEventStore processed, AccountActivityStore activity,
-            RuleEngine engine, AssessmentRepository repository, AlertPublisher alerts, Clock clock) {
-        return new ScoreTransactionService(processed, activity, engine, repository, alerts, clock);
+            RuleEngine engine, AssessmentRepository repository, HighRiskAccountCache riskCache, AlertPublisher alerts,
+            Clock clock) {
+        return new ScoreTransactionService(processed, activity, engine, repository, riskCache, alerts, clock);
     }
 
     @Bean
