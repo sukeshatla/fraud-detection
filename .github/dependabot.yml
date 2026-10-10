@@ -15,9 +15,21 @@ updates:
     groups:
       react: { patterns: ["react", "react-dom", "@types/react*"] }
       tooling: { patterns: ["vite", "vitest", "eslint*", "typescript*", "@vitejs/*", "prettier"] }
+    ignore:
+      # TypeScript 7 (native compiler) is blocked until typescript-eslint accepts it as a peer.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
   - package-ecosystem: docker
     directories: ["/infra/docker", "/infra/nginx"]
     schedule: { interval: weekly }
+    ignore:
+      # The runtime JRE tracks the Java LTS the code is compiled and tested on (ADR-0004);
+      # moving to the next LTS is a deliberate change of toolchain, CI JDK and image together.
+      - dependency-name: eclipse-temurin
+        update-types: ["version-update:semver-major"]
+      # Build-stage Node follows LTS (even) releases only; odd majors are short-lived "Current".
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]
