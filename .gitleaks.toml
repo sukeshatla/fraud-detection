@@ -1,0 +1,15 @@
+# Secret scanning (AC-015-06). Extends the default rules; allowlists only values that are
+# deliberately public, local-development placeholders.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Local/CI placeholders, documented as non-secrets"
+regexes = [
+  '''fraud-local-only''',
+  '''ci-only-not-a-secret''',
+  '''dev-only-not-a-secret[A-Za-z0-9-]*''',
+]
+paths = [
+  '''dashboard/package-lock\.json''',
+]

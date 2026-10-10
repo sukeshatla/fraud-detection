@@ -1,58 +1,91 @@
 name: CI
 
+# Pull-request and main-branch quality gates (AC-014-01..04). Stages run as separate jobs so the
+# cheap feedback (compile, unit, static analysis) arrives first; path filters skip what a change
+# can't affect.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
 
-# Cancel superseded runs on the same branch/PR
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
-  checks: write   # test report annotations
+  checks: write
+
+env:
+  MAVEN_ARGS: -B -ntp
 
 jobs:
-  build:
-    name: Build & test (unit · slice · arch · integration)
+  changes:
+    name: Detect changed areas
+    runs-on: ubuntu-latest
+    outputs:
+      java: ${{ steps.filter.outputs.java }}
+      dashboard: ${{ steps.filter.outputs.dashboard }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            java:
+              - '**/*.java'
+              - '**/pom.xml'
+              - '**/src/main/resources/**'
+              - '**/src/test/resources/**'
+              - '.mvn/**'
+              - 'config/**'
+              - '.github/workflows/ci.yml'
+            dashboard:
+              - 'dashboard/**'
+              - '.github/workflows/ci.yml'
+
+  unit:
+    name: Build · unit · ArchUnit · Error Prone · Checkstyle · coverage
+    needs: changes
+    if: needs.changes.outputs.java == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with: { distribution: temurin, java-version: '21', cache: maven }
+      # unit + slice + architecture tests, compiler-level bug patterns (Error Prone), style, JaCoCo gate
+      - run: ./mvnw verify -DskipITs
+      - uses: mikepenz/action-junit-report@v6
+        if: always()
+        with: { report_paths: '**/target/surefire-reports/TEST-*.xml', check_name: Unit tests }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with: { name: coverage, path: '**/target/site/jacoco/' }
+
+  integration:
+    name: Integration tests (Testcontainers)
+    needs: unit
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
-
-      # GitHub-hosted Ubuntu runners ship with Docker, so Testcontainers ITs run here too.
-      # Docker Hub rate-limits anonymous pulls per IP, and shared runners share IPs. Testcontainers
-      # pulls Docker Hub images through Google's public mirror instead (same images, no credentials).
-      - name: Verify
-        run: ./mvnw -B -ntp verify
+      - uses: actions/setup-java@v6
+        with: { distribution: temurin, java-version: '21', cache: maven }
+      # Docker Hub rate-limits anonymous pulls per IP; shared runners share IPs.
+      - name: Verify (ITs only)
+        run: ./mvnw verify -DskipUTs -Djacoco.skip=true -Dcheckstyle.skip=true
         env:
           TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
-
-      - name: Publish test report
+      - uses: mikepenz/action-junit-report@v6
         if: always()
-        uses: mikepenz/action-junit-report@v6
-        with:
-          report_paths: '**/target/{surefire,failsafe}-reports/TEST-*.xml'
-
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: jacoco
-          path: '**/target/site/jacoco/'
+        with: { report_paths: '**/target/failsafe-reports/TEST-*.xml', check_name: Integration tests }
 
   dashboard:
     name: Dashboard (format · lint · typecheck · test · build)
+    needs: changes
+    if: needs.changes.outputs.dashboard == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
@@ -60,16 +93,45 @@ jobs:
         working-directory: dashboard
     steps:
       - uses: actions/checkout@v7
-
       - uses: actions/setup-node@v7
         with:
           node-version-file: dashboard/.nvmrc
           cache: npm
           cache-dependency-path: dashboard/package-lock.json
-
       - run: npm ci
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  config-lint:
+    name: Prometheus rules · Kubernetes manifests · compose
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: promtool check
+        run: |
+          docker run --rm -v "$PWD/infra/prometheus:/etc/prometheus" --entrypoint promtool \
+            mirror.gcr.io/prom/prometheus:v3.7.0 check config /etc/prometheus/prometheus.yml
+      - name: kustomize build (base + overlays)
+        run: |
+          kubectl kustomize k8s/overlays/ci > /dev/null
+          kubectl kustomize k8s/base > /dev/null
+      - name: docker compose config
+        run: docker compose -f infra/docker-compose.yml --profile app config --quiet
+
+  # Required-check aggregator for branch protection: one stable name regardless of path filters.
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs: [changes, unit, integration, dashboard, config-lint]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo '${{ toJSON(needs) }}' | python3 -c "
+          import json, sys
+          bad = {k: v['result'] for k, v in json.load(sys.stdin).items() if v['result'] not in ('success', 'skipped')}
+          sys.exit(f'failed: {bad}' if bad else 0)"

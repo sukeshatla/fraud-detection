@@ -31,6 +31,9 @@
         <spring-boot.version>4.1.1</spring-boot.version>
         <archunit.version>1.5.1</archunit.version>
         <resilience4j.version>2.4.0</resilience4j.version>
+        <errorprone.version>2.50.0</errorprone.version>
+        <checkstyle.version>14.3.0</checkstyle.version>
+        <maven-checkstyle-plugin.version>3.6.0</maven-checkstyle-plugin.version>
 
         <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.5.3</maven-surefire-plugin.version>
@@ -38,6 +41,8 @@
 
         <!-- Coverage gate (constitution §5): applies to application + domain packages -->
         <jacoco.minimum.line.coverage>0.80</jacoco.minimum.line.coverage>
+        <!-- -DskipUTs runs only integration tests (CI integration stage); -DskipITs the reverse -->
+        <skipUTs>false</skipUTs>
     </properties>
 
     <dependencyManagement>
@@ -89,7 +94,19 @@
                         <parameters>true</parameters>
                         <compilerArgs>
                             <arg>-Xlint:all,-processing,-serial</arg>
+                            <!-- Error Prone (AC-014-03): compile-time bug patterns; ERROR-level findings fail the build -->
+                            <arg>-XDcompilePolicy=simple</arg>
+                            <arg>-XDaddTypeAnnotationsToSymbol=true</arg>
+                            <arg>--should-stop=ifError=FLOW</arg>
+                            <arg>-Xplugin:ErrorProne -XepExcludedPaths:.*/target/.*</arg>
                         </compilerArgs>
+                        <annotationProcessorPaths>
+                            <path>
+                                <groupId>com.google.errorprone</groupId>
+                                <artifactId>error_prone_core</artifactId>
+                                <version>${errorprone.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
                     </configuration>
                 </plugin>
                 <!-- Unit, slice and architecture tests: *Test -->
@@ -98,6 +115,7 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>${maven-surefire-plugin.version}</version>
                     <configuration>
+                        <skipTests>${skipUTs}</skipTests>
                         <includes>
                             <include>**/*Test.java</include>
                         </includes>
@@ -143,6 +161,34 @@
         </pluginManagement>
 
         <plugins>
+            <!-- Checkstyle (AC-014-03): curated defect-oriented rules, see config/checkstyle -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <version>${maven-checkstyle-plugin.version}</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>com.puppycrawl.tools</groupId>
+                        <artifactId>checkstyle</artifactId>
+                        <version>${checkstyle.version}</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <configLocation>${maven.multiModuleProjectDirectory}/config/checkstyle/checkstyle.xml</configLocation>
+                    <includeTestSourceDirectory>true</includeTestSourceDirectory>
+                    <consoleOutput>true</consoleOutput>
+                    <violationSeverity>error</violationSeverity>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>checkstyle</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>

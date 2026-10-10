@@ -33,7 +33,9 @@ class FraudAlertEventsTest {
 
         assertThat(message.topic()).isEqualTo("fraud.alerts.v1");
         assertThat(message.key()).isEqualTo("acc-1001");
-        assertThat(message.headers()).containsEntry(EventHeaders.EVENT_TYPE, "FraudAlertRaised").containsEntry(EventHeaders.SCHEMA_VERSION, "1");
+        assertThat(message.headers())
+                .containsEntry(EventHeaders.EVENT_TYPE, "FraudAlertRaised")
+                .containsEntry(EventHeaders.SCHEMA_VERSION, "1");
         assertThat(event.transactionId()).isEqualTo("txn-1");
         assertThat(event.sourceEventId()).isEqualTo(assessment.transaction().eventId());
         assertThat(event.riskScore()).isEqualTo(50);

@@ -12,13 +12,14 @@ COPY ${MODULE}/target/${MODULE}-*.jar app.jar
 RUN java -Djarmode=tools -jar app.jar extract --layers --launcher --destination extracted
 
 FROM eclipse-temurin:21-jre
-RUN groupadd --system app && useradd --system --gid app app
+# Fixed numeric UID: Kubernetes runAsNonRoot can only verify a NUMERIC user is not root.
+RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app app
 WORKDIR /app
 COPY --from=layers /build/extracted/dependencies/ ./
 COPY --from=layers /build/extracted/spring-boot-loader/ ./
 COPY --from=layers /build/extracted/snapshot-dependencies/ ./
 COPY --from=layers /build/extracted/application/ ./
-USER app
+USER 10001
 # Container-aware heap; virtual threads need no thread-pool tuning.
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
 ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]

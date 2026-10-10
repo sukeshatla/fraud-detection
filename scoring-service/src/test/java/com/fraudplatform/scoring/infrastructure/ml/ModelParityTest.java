@@ -73,7 +73,7 @@ class ModelParityTest {
 
     private static String read() {
         try (var in = new ClassPathResource("ml/model-v1.json").getInputStream()) {
-            return new String(in.readAllBytes());
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
         } catch (java.io.IOException e) {
             throw new IllegalStateException(e);
         }

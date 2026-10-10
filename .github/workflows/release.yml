@@ -1,0 +1,19 @@
+name: Release
+
+# AC-014-06: Conventional Commits on main → a release PR with the changelog and the next semver;
+# merging it tags the release.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v5
+        with:
+          release-type: simple

@@ -47,7 +47,8 @@ class ScoringObservabilityIT {
         Instant now = Instant.now();
         var event = new TransactionReceivedEvent(1, UUID.randomUUID(), "txn-" + UUID.randomUUID(), account,
                 new BigDecimal("9000.00"), "USD", "m-1", "7995", "US", "CARD_NOT_PRESENT", now, now);
-        ProducerRecord<String, String> record = new ProducerRecord<>(Topics.TRANSACTIONS_RECEIVED, account, mapper.writeValueAsString(event));
+        ProducerRecord<String, String> record =
+                new ProducerRecord<>(Topics.TRANSACTIONS_RECEIVED, account, mapper.writeValueAsString(event));
         record.headers().add(EventHeaders.TRACEPARENT, TRACEPARENT.getBytes(StandardCharsets.UTF_8));
         record.headers().add(EventHeaders.REQUEST_ID, "rid-scoring-1".getBytes(StandardCharsets.UTF_8));
         // A plain (non-observed) template: an observed one would append its OWN traceparent,

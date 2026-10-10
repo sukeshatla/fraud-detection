@@ -1,0 +1,26 @@
+# CI / kind: images are built in the pipeline and loaded into the cluster (no registry pull);
+# replica counts trimmed to fit a GitHub runner.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+secretGenerator:
+  - name: fraud-db
+    namespace: fraud
+    literals: ["password=ci-only-not-a-secret"]
+    options: { disableNameSuffixHash: true }
+patches:
+  - target: { kind: Deployment, name: "(ingestion|scoring)-service" }
+    patch: |-
+      - { op: replace, path: /spec/replicas, value: 2 }
+  - target: { kind: Deployment, name: alert-service }
+    patch: |-
+      - { op: replace, path: /spec/replicas, value: 1 }
+  - target: { kind: PodDisruptionBudget }
+    patch: |-
+      - { op: replace, path: /spec/minAvailable, value: 0 }
+images:
+  - { name: fraud/ingestion-service, newTag: ci }
+  - { name: fraud/scoring-service, newTag: ci }
+  - { name: fraud/alert-service, newTag: ci }
+  - { name: fraud/gateway, newTag: ci }

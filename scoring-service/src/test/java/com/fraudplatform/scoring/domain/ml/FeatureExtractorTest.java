@@ -40,8 +40,8 @@ class FeatureExtractorTest {
     @Test
     @DisplayName("Hour is cyclical: 23:59 and 00:01 are neighbours, not opposite ends")
     void hourIsCyclical() {
-        double[] lateNight = extractor.extract(aTransaction().occurredAt(Instant.parse("2026-10-09T23:59:00Z")).build(), AccountActivity.none());
-        double[] earlyMorning = extractor.extract(aTransaction().occurredAt(Instant.parse("2026-10-10T00:01:00Z")).build(), AccountActivity.none());
+        double[] lateNight = extractor.extract(at("2026-10-09T23:59:00Z"), AccountActivity.none());
+        double[] earlyMorning = extractor.extract(at("2026-10-10T00:01:00Z"), AccountActivity.none());
 
         assertThat(Math.hypot(lateNight[1] - earlyMorning[1], lateNight[2] - earlyMorning[2])).isLessThan(0.01);
     }
@@ -49,5 +49,9 @@ class FeatureExtractorTest {
     @Test
     void noPreviousCountryMeansNoChange() {
         assertThat(extractor.extract(aTransaction().build(), AccountActivity.none())[7]).isZero();
+    }
+
+    private static com.fraudplatform.scoring.domain.Transaction at(String instant) {
+        return aTransaction().occurredAt(Instant.parse(instant)).build();
     }
 }

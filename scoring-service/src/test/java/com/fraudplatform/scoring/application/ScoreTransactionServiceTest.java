@@ -81,7 +81,8 @@ class ScoreTransactionServiceTest {
     };
 
     private final Transaction risky = aTransaction().eventId(UUID.randomUUID()).transactionId("t-risky").amount("5000").build();
-    private final Transaction clean = aTransaction().eventId(UUID.randomUUID()).transactionId("t-clean").accountId("acc-clean").amount("10").build();
+    private final Transaction clean = aTransaction().eventId(UUID.randomUUID()).transactionId("t-clean")
+            .accountId("acc-clean").amount("10").build();
 
     @BeforeEach
     void setUp() {

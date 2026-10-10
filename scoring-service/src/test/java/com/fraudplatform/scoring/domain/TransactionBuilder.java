@@ -24,15 +24,42 @@ public final class TransactionBuilder {
         return new TransactionBuilder();
     }
 
-    public TransactionBuilder eventId(UUID v) { this.eventId = v; return this; }
-    public TransactionBuilder transactionId(String v) { this.transactionId = v; return this; }
-    public TransactionBuilder accountId(String v) { this.accountId = v; return this; }
-    public TransactionBuilder amount(String v) { this.amount = new BigDecimal(v); return this; }
-    public TransactionBuilder currency(String v) { this.currency = v; return this; }
-    public TransactionBuilder mcc(String v) { this.mcc = v; return this; }
-    public TransactionBuilder country(String v) { this.country = v; return this; }
-    public TransactionBuilder channel(String v) { this.channel = v; return this; }
-    public TransactionBuilder occurredAt(Instant v) { this.occurredAt = v; return this; }
+    public TransactionBuilder eventId(UUID v) {
+        this.eventId = v;
+        return this;
+    }
+    public TransactionBuilder transactionId(String v) {
+        this.transactionId = v;
+        return this;
+    }
+    public TransactionBuilder accountId(String v) {
+        this.accountId = v;
+        return this;
+    }
+    public TransactionBuilder amount(String v) {
+        this.amount = new BigDecimal(v);
+        return this;
+    }
+    public TransactionBuilder currency(String v) {
+        this.currency = v;
+        return this;
+    }
+    public TransactionBuilder mcc(String v) {
+        this.mcc = v;
+        return this;
+    }
+    public TransactionBuilder country(String v) {
+        this.country = v;
+        return this;
+    }
+    public TransactionBuilder channel(String v) {
+        this.channel = v;
+        return this;
+    }
+    public TransactionBuilder occurredAt(Instant v) {
+        this.occurredAt = v;
+        return this;
+    }
 
     public Transaction build() {
         return new Transaction(eventId, transactionId, accountId, amount, currency, merchantId, mcc, country, channel, occurredAt);

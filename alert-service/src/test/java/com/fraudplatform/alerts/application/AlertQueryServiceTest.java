@@ -54,6 +54,7 @@ class AlertQueryServiceTest {
         UUID id = UUID.randomUUID();
         given(repository.findDetails(id)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> new AlertQueryService(repository, java.time.Clock.systemUTC()).details(id)).isInstanceOf(AlertNotFoundException.class);
+        assertThatThrownBy(() -> new AlertQueryService(repository, java.time.Clock.systemUTC()).details(id))
+                .isInstanceOf(AlertNotFoundException.class);
     }
 }

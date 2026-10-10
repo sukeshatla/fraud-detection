@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: fraud-platform }
+data:
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  REDIS_HOST: redis
+  DB_URL: jdbc:postgresql://postgres:5432/fraud
+  LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
