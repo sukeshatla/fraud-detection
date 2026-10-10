@@ -25,6 +25,9 @@ class IngestAlertServiceTest {
     @Mock
     private AlertChangeBus changes;
 
+    @Mock
+    private AlertMetrics metrics;
+
     private final NewAlert alert = newAlert(UUID.randomUUID(), "txn-1", "acc-1", NOW);
 
     @Test
@@ -32,7 +35,7 @@ class IngestAlertServiceTest {
     void announcesNewAlert() {
         given(repository.insertIfAbsent(alert)).willReturn(true);
 
-        assertThat(new IngestAlertService(repository, changes).ingest(alert)).isTrue();
+        assertThat(new IngestAlertService(repository, changes, metrics).ingest(alert)).isTrue();
 
         ArgumentCaptor<AlertChange> captor = ArgumentCaptor.forClass(AlertChange.class);
         verify(changes).publish(captor.capture());
@@ -40,6 +43,7 @@ class IngestAlertServiceTest {
         assertThat(captor.getValue().alert().id()).isEqualTo(alert.id());
         assertThat(captor.getValue().alert().status()).isEqualTo(AlertStatus.OPEN);
         assertThat(captor.getValue().alert().version()).isZero();
+        verify(metrics).raised(com.fraudplatform.alerts.domain.Severity.HIGH);
     }
 
     @Test
@@ -47,7 +51,7 @@ class IngestAlertServiceTest {
     void duplicateIsSilent() {
         given(repository.insertIfAbsent(alert)).willReturn(false);
 
-        assertThat(new IngestAlertService(repository, changes).ingest(alert)).isFalse();
-        verifyNoInteractions(changes);
+        assertThat(new IngestAlertService(repository, changes, metrics).ingest(alert)).isFalse();
+        verifyNoInteractions(changes, metrics);
     }
 }

@@ -5,7 +5,12 @@ import com.fraudplatform.alerts.application.InvalidEventException;
 import com.fraudplatform.alerts.application.NewAlert;
 import com.fraudplatform.alerts.application.RuleHitView;
 import com.fraudplatform.alerts.domain.Severity;
+import com.fraudplatform.contracts.EventHeaders;
 import com.fraudplatform.contracts.Topics;
+import java.nio.charset.StandardCharsets;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.header.Header;
+import org.slf4j.MDC;
 import com.fraudplatform.contracts.events.FraudAlertEvent;
 import java.math.BigDecimal;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -26,8 +31,16 @@ class FraudAlertListener {
     }
 
     @KafkaListener(id = "alerts", topics = Topics.FRAUD_ALERTS, groupId = "alerts")
-    void onAlert(String payload) {
-        service.ingest(toNewAlert(payload));
+    void onAlert(ConsumerRecord<String, String> record) {
+        Header requestId = record.headers().lastHeader(EventHeaders.REQUEST_ID);
+        if (requestId != null) {
+            MDC.put("requestId", new String(requestId.value(), StandardCharsets.UTF_8)); // correlate logs with the original request
+        }
+        try {
+            service.ingest(toNewAlert(record.value()));
+        } finally {
+            MDC.remove("requestId");
+        }
     }
 
     private NewAlert toNewAlert(String payload) {

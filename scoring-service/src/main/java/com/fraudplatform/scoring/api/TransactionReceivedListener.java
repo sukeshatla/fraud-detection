@@ -1,12 +1,18 @@
 package com.fraudplatform.scoring.api;
 
+import com.fraudplatform.contracts.EventHeaders;
 import com.fraudplatform.contracts.Topics;
 import com.fraudplatform.contracts.events.TransactionReceivedEvent;
 import com.fraudplatform.scoring.application.InvalidEventException;
 import com.fraudplatform.scoring.application.ScoreTransactionService;
 import com.fraudplatform.scoring.domain.Transaction;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.header.Header;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.listener.BatchListenerFailedException;
 import org.springframework.stereotype.Component;
@@ -25,6 +31,8 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 class TransactionReceivedListener {
 
+    static final List<String> PROPAGATED = List.of(EventHeaders.TRACEPARENT, EventHeaders.TRACESTATE, EventHeaders.REQUEST_ID);
+
     private final ScoreTransactionService service;
     private final JsonMapper mapper;
 
@@ -34,11 +42,12 @@ class TransactionReceivedListener {
     }
 
     @KafkaListener(id = "scoring", topics = Topics.TRANSACTIONS_RECEIVED, groupId = "scoring", batch = "true")
-    void onTransactions(List<String> payloads) {
-        List<Transaction> valid = new ArrayList<>(payloads.size());
-        for (int i = 0; i < payloads.size(); i++) {
+    void onTransactions(List<ConsumerRecord<String, String>> records) {
+        List<Transaction> valid = new ArrayList<>(records.size());
+        for (int i = 0; i < records.size(); i++) {
             try {
-                valid.add(toDomain(payloads.get(i)));
+                ConsumerRecord<String, String> record = records.get(i);
+                valid.add(toDomain(record.value()).withMetadata(propagationHeaders(record)));
             } catch (InvalidEventException e) {
                 if (!valid.isEmpty()) {
                     service.scoreBatch(valid);
@@ -47,6 +56,22 @@ class TransactionReceivedListener {
             }
         }
         service.scoreBatch(valid);
+    }
+
+    /**
+     * Batch processing has no single "current span", so the trace context and request id of each
+     * record are carried with its transaction and copied onto any alert it causes. The trace then
+     * continues downstream even across the outbox.
+     */
+    private static Map<String, String> propagationHeaders(ConsumerRecord<String, String> record) {
+        Map<String, String> metadata = new HashMap<>();
+        for (String name : PROPAGATED) {
+            Header header = record.headers().lastHeader(name);
+            if (header != null) {
+                metadata.put(name, new String(header.value(), StandardCharsets.UTF_8));
+            }
+        }
+        return metadata;
     }
 
     private Transaction toDomain(String payload) {

@@ -59,6 +59,9 @@ class ScoreTransactionServiceTest {
 
     private final FakeHighRiskAccountCache riskCache = new FakeHighRiskAccountCache();
 
+    @Mock
+    private ScoringMetrics metrics;
+
     /** Default: model unavailable (rules only); individual tests stub a prediction. */
     private MlScorer ml = (tx, activity) -> Optional.empty();
 
@@ -84,7 +87,7 @@ class ScoreTransactionServiceTest {
     void setUp() {
         service = new ScoreTransactionService(processed, activityStore,
                 new RuleEngine(List.of(BIG_IS_BAD, new KnownHighRiskAccountRule())), repository, riskCache, ml,
-                new ScoreBlender(0.6),
+                new ScoreBlender(0.6), metrics,
                 Clock.fixed(NOW, ZoneOffset.UTC), 8);
         lenient().when(activityStore.recordAndGet(any())).thenReturn(AccountActivity.none());
     }
@@ -205,6 +208,15 @@ class ScoreTransactionServiceTest {
         setUp();
 
         assertThat(service.scoreBatch(List.of(risky)).getFirst().decision()).isEqualTo(Decision.DECLINE);
+    }
+
+    @Test
+    @DisplayName("AC-012-02: every assessed batch is reported to metrics (after the commit)")
+    void reportsMetrics() {
+        List<RiskAssessment> result = service.scoreBatch(List.of(risky, clean));
+
+        verify(metrics).assessed(result);
+        verify(metrics).batchProcessed(org.mockito.ArgumentMatchers.eq(2), any());
     }
 
     @SuppressWarnings("unchecked")

@@ -46,4 +46,16 @@ class FraudAlertEventsTest {
     void alertIdIsDeterministic() {
         assertThat(FraudAlertEvents.toEvent(assessment).alertEventId()).isEqualTo(FraudAlertEvents.toEvent(assessment).alertEventId());
     }
+
+    @Test
+    @DisplayName("AC-012-04/05: the source transaction's trace context and request id become alert headers (bridging the outbox)")
+    void propagatesMetadataIntoHeaders() {
+        var tx = aTransaction().build().withMetadata(java.util.Map.of("traceparent", "00-abc-def-01", "x-request-id", "rid-9"));
+        var alerting = new RiskAssessment(tx, 50, 50, Decision.REVIEW, List.of(), Instant.parse("2026-10-09T18:15:31Z"));
+
+        assertThat(events.toOutbox(alerting).headers())
+                .containsEntry("traceparent", "00-abc-def-01")
+                .containsEntry("x-request-id", "rid-9")
+                .containsEntry(EventHeaders.EVENT_TYPE, "FraudAlertRaised");
+    }
 }

@@ -29,7 +29,10 @@ import com.fraudplatform.scoring.infrastructure.kafka.KafkaDeadLetterReplay;
 import com.fraudplatform.scoring.infrastructure.ml.CircuitBreakerMlScorer;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import com.fraudplatform.scoring.application.ScoringMetrics;
+import com.fraudplatform.scoring.infrastructure.metrics.MicrometerScoringMetrics;
 import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.ProducerFactory;
 import com.fraudplatform.scoring.infrastructure.ml.LogisticRegressionMlScorer;
 import com.fraudplatform.scoring.infrastructure.ml.ModelLoader;
 import com.fraudplatform.scoring.infrastructure.ml.SemaphoreBulkheadMlScorer;
@@ -39,7 +42,9 @@ import com.fraudplatform.scoring.infrastructure.redis.RedisAccountActivityStore;
 import com.fraudplatform.scoring.infrastructure.redis.RedisHighRiskAccountCache;
 import com.fraudplatform.scoring.infrastructure.redis.RedisProcessedEventStore;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.observation.ObservationPredicate;
 import java.time.Clock;
+import org.springframework.http.server.observation.ServerRequestObservationContext;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -65,6 +70,13 @@ class ScoringConfig {
     @Bean
     Clock clock() {
         return Clock.systemUTC();
+    }
+
+    /** Don't trace health checks / scrapes: every few seconds per replica, they'd drown real traces. */
+    @Bean
+    ObservationPredicate skipActuatorObservations() {
+        return (name, context) -> !(context instanceof ServerRequestObservationContext server
+                && server.getCarrier().getRequestURI().startsWith("/actuator"));
     }
 
     @Bean
@@ -121,9 +133,12 @@ class ScoringConfig {
     }
 
     @Bean
-    OutboxRelay outboxRelay(JdbcTemplate jdbc, TransactionTemplate tx, KafkaTemplate<String, String> kafka, JsonMapper mapper,
-            ScoringProperties props, MeterRegistry meters) {
-        return new OutboxRelay(jdbc, tx, kafka, mapper, OUTBOX_LOCK_KEY, OUTBOX_BATCH, props.publishTimeout(), meters);
+    OutboxRelay outboxRelay(JdbcTemplate jdbc, TransactionTemplate tx, ProducerFactory<String, String> producers,
+            JsonMapper mapper, ScoringProperties props, MeterRegistry meters) {
+        // A NON-observed template: the outbox rows already carry the trace context of the transaction
+        // that caused them. An observed template would stamp the relay's own (unrelated) span instead.
+        return new OutboxRelay(jdbc, tx, new KafkaTemplate<>(producers), mapper, OUTBOX_LOCK_KEY, OUTBOX_BATCH,
+                props.publishTimeout(), meters);
     }
 
     /** SmartLifecycle: starts with the context, drains its in-flight batch on shutdown. */
@@ -185,11 +200,16 @@ class ScoringConfig {
     }
 
     @Bean
+    ScoringMetrics scoringMetrics(MeterRegistry meters) {
+        return new MicrometerScoringMetrics(meters);
+    }
+
+    @Bean
     ScoreTransactionService scoreTransactionService(ProcessedEventStore processed, AccountActivityStore activity,
             RuleEngine engine, AssessmentRepository repository, HighRiskAccountCache riskCache, MlScorer mlScorer,
-            Clock clock, ScoringProperties props) {
+            ScoringMetrics metrics, Clock clock, ScoringProperties props) {
         return new ScoreTransactionService(processed, activity, engine, repository, riskCache, mlScorer,
-                new ScoreBlender(props.ml().ruleWeight()), clock, props.maxConcurrentAccounts());
+                new ScoreBlender(props.ml().ruleWeight()), metrics, clock, props.maxConcurrentAccounts());
     }
 
     @Bean

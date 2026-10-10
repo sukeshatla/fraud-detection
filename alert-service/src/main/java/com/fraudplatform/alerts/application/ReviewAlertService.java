@@ -2,6 +2,7 @@ package com.fraudplatform.alerts.application;
 
 import com.fraudplatform.alerts.domain.AlertStatus;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,7 +26,11 @@ public class ReviewAlertService {
     private final AlertChangeBus changes;
     private final Clock clock;
 
-    public ReviewAlertService(AlertRepository repository, AlertLock lock, AlertChangeBus changes, Clock clock) {
+    private final AlertMetrics metrics;
+
+    public ReviewAlertService(AlertRepository repository, AlertLock lock, AlertChangeBus changes, AlertMetrics metrics,
+            Clock clock) {
+        this.metrics = metrics;
         this.repository = repository;
         this.lock = lock;
         this.changes = changes;
@@ -49,6 +54,9 @@ public class ReviewAlertService {
         }
         // Committed: refresh live dashboards (best effort; the resolution event is already in the outbox).
         changes.publish(new AlertChange(AlertChange.Type.UPDATED, updated));
+        if (to.isTerminal()) {
+            metrics.resolved(to, Duration.between(updated.createdAt(), updated.updatedAt()));
+        }
         return updated;
     }
 }

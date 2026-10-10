@@ -35,7 +35,7 @@ Features build on each other. Each one is a shippable vertical slice with its ow
 | 009 | [Concurrency deep dive](009-concurrency-deep-dive/spec.md) | Virtual threads vs platform threads, pinning, Semaphore, CompletableFuture, locks | ✅ Implemented |
 | 010 | [Resilience](010-resilience/spec.md) | Retries + backoff, DLT, circuit breaker, transactional outbox | ✅ Implemented |
 | 011 | [Load balancing & horizontal scaling](011-load-balancing/spec.md) | NGINX, health checks, consumer-group rebalancing | ✅ Implemented |
-| 012 | [Observability](012-observability/spec.md) | Micrometer, Prometheus, Grafana, tracing, correlation IDs | 📝 Spec |
+| 012 | [Observability](012-observability/spec.md) | Micrometer, Prometheus, Grafana, tracing, correlation IDs | ✅ Implemented |
 | 013 | [Load testing with Gatling](013-load-testing-gatling/spec.md) | Open vs closed workload models, SLO assertions | 📝 Spec |
 | 014 | [CI/CD pipeline](014-ci-cd/spec.md) | Quality gates, container images, supply-chain scanning, release | 📝 Spec |
 | 015 | [Security](015-security/spec.md) | OAuth2 resource server, JWT, RBAC, PII masking | 📝 Spec |

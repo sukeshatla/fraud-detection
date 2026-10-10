@@ -45,6 +45,9 @@ class AlertConcurrencyIT {
     private com.fraudplatform.alerts.application.AlertChangeBus changes;
 
     @Autowired
+    private com.fraudplatform.alerts.application.AlertMetrics metrics;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     @Test
@@ -69,7 +72,7 @@ class AlertConcurrencyIT {
     void layerTwoHoldsWithoutLock() throws Exception {
         UUID id = newOpenAlert();
         AlertLock noLock = alertId -> Optional.of(() -> {}); // simulates an expired / failed Redis lease
-        ReviewAlertService unguarded = new ReviewAlertService(repository, noLock, changes, Clock.systemUTC());
+        ReviewAlertService unguarded = new ReviewAlertService(repository, noLock, changes, metrics, Clock.systemUTC());
 
         List<String> outcomes = race(50, () -> {
             try {

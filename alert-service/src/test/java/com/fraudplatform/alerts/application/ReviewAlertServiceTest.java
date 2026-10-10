@@ -39,13 +39,16 @@ class ReviewAlertServiceTest {
     @Mock
     private AlertChangeBus changes;
 
+    @Mock
+    private AlertMetrics metrics;
+
     private final AtomicBoolean lockReleased = new AtomicBoolean();
     private boolean lockAvailable = true;
 
     private final AlertLock lock = alertId -> lockAvailable ? Optional.of(() -> lockReleased.set(true)) : Optional.empty();
 
     private ReviewAlertService service() {
-        return new ReviewAlertService(repository, lock, changes, Clock.fixed(NOW, ZoneOffset.UTC));
+        return new ReviewAlertService(repository, lock, changes, metrics, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -107,6 +110,8 @@ class ReviewAlertServiceTest {
                 .willReturn(alert(ID, FALSE_POSITIVE, 2));
 
         assertThat(service().review(ID, FALSE_POSITIVE, 1, "analyst-1").status()).isEqualTo(FALSE_POSITIVE);
+        // fixture alert was created at NOW and resolved at NOW
+        verify(metrics).resolved(FALSE_POSITIVE, java.time.Duration.ZERO);
     }
 
     @Test

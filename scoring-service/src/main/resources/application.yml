@@ -30,6 +30,8 @@ spring:
       timeout: 500ms
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    template:
+      observation-enabled: true     # producer spans + traceparent header on every record
     consumer:
       group-id: scoring
       auto-offset-reset: earliest     # a new consumer group starts from the beginning: never skip transactions
@@ -38,6 +40,7 @@ spring:
       properties:
         partition.assignment.strategy: org.apache.kafka.clients.consumer.CooperativeStickyAssignor  # incremental rebalances
     listener:
+      observation-enabled: true       # consumer spans continue the producer's trace (record listeners)
       concurrency: 3                  # consumer threads per instance; total across instances ≤ partitions
       ack-mode: batch                 # commit after the whole poll batch was processed successfully
     producer:
@@ -57,11 +60,24 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       probes:
         enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true          # histogram buckets → p95/p99 computed in Prometheus
+      slo:
+        http.server.requests: 50ms,100ms,250ms,500ms
+    tags:
+      application: ${spring.application.name}
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}   # 10% of requests traced by default
+  # Span export is OFF unless MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT is set
+  # (compose points it at Jaeger). An empty value would count as "configured" and fail startup.
 
 fraud:
   scoring:
