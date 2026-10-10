@@ -3,7 +3,7 @@ import { cleanup } from '@testing-library/react';
 import { FakeEventSource } from './fakeEventSource';
 import { server } from './server';
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
   FakeEventSource.instances = [];
   vi.stubGlobal('EventSource', FakeEventSource);
