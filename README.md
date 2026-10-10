@@ -39,7 +39,7 @@ flowchart LR
 | Threads, semaphores, locks, CompletableFuture | [08](docs/concepts/08-concurrency-primitives.md) | ✅ 005 · 006 · 009 |
 | Load testing with Gatling | [09](docs/concepts/09-load-testing-gatling.md) | 013 |
 | CI/CD pipeline | [10](docs/concepts/10-ci-cd-pipeline.md) | ✅ 000 · 014 |
-| Load balancing | [11](docs/concepts/11-load-balancing.md) | 011 |
+| Load balancing | [11](docs/concepts/11-load-balancing.md) | ✅ 011 |
 | Idempotency & exactly-once | [12](docs/concepts/12-idempotency-and-exactly-once.md) | ✅ 002 · 003 · 004 · 010 |
 | Resilience: retries, DLT, circuit breaker, outbox | [13](docs/concepts/13-resilience-patterns.md) | ✅ 010 |
 | Observability | [14](docs/concepts/14-observability.md) | 012 |
@@ -71,7 +71,7 @@ flowchart LR
 | 008 | React dashboard | ✅ |
 | 009 | Concurrency deep dive | ✅ |
 | 010 | Resilience | ✅ |
-| 011 | Load balancing | 📝 |
+| 011 | Load balancing | ✅ |
 | 012 | Observability | 📝 |
 | 013 | Gatling load tests | 📝 |
 | 014 | CI/CD pipeline | 📝 |
@@ -87,8 +87,12 @@ Details and dependency graph: [specs/README.md](specs/README.md)
 # 1. Build and run all tests (integration tests need Docker running)
 ./mvnw verify
 
-# 2. Start infrastructure
+# 2a. Start infrastructure only (run services from your IDE / mvn)
 docker compose -f infra/docker-compose.yml up -d
+
+# 2b. …or the whole load-balanced platform: 3×ingestion, 3×scoring, 2×alerts behind NGINX
+#     (dashboard + APIs on http://localhost:8080), with an end-to-end smoke test
+infra/smoke-test.sh
 
 # 3. Run the services (separate terminals)
 ./mvnw -pl ingestion-service spring-boot:run
@@ -143,7 +147,7 @@ docker compose -f infra/docker-compose.yml --profile tools up -d kafka-ui
 ├── alert-service/          Analyst queue: Kafka → JPA, keyset paging, Redis lock + @Version (007)
 ├── dashboard/              React 19 + TS analyst console: live SSE queue, review actions (008)
 ├── concurrency-lab/        Executable concurrency notes: measured, asserted examples (009)
-├── infra/                  docker-compose for local infrastructure
+├── infra/                  docker-compose (infra + `app` profile), NGINX gateway, Dockerfile, smoke test
 ├── docs/
 │   ├── constitution.md     engineering rules & Definition of Done
 │   ├── architecture/       diagrams

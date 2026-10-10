@@ -348,7 +348,7 @@ flowchart TB
     classDef svc fill:#e8f1ff,stroke:#3b6fd8
 ```
 
-- Local: `docker compose -f infra/docker-compose.yml up`. The [`infra/`](../../infra) folder grows feature by feature.
+- Local: `docker compose -f infra/docker-compose.yml up -d` (infrastructure) or `infra/smoke-test.sh` (the full replicated stack behind NGINX on :8080).
 - Health: `/actuator/health/liveness` and `/actuator/health/readiness` back the LB and Kubernetes probes.
 - Graceful shutdown: `server.shutdown=graceful`, so in-flight requests finish and Kafka offsets are committed before exit.
 

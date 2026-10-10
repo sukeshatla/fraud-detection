@@ -1,6 +1,8 @@
-# Local infrastructure. Grows feature by feature (services + NGINX in 011, Prometheus/Grafana in 012).
-#   docker compose -f infra/docker-compose.yml up -d
-#   docker compose -f infra/docker-compose.yml --profile tools up -d   # + Kafka UI on :8090
+# Local platform.
+#   docker compose -f infra/docker-compose.yml up -d                       # infrastructure only (run services from the IDE)
+#   ./mvnw -DskipTests package && \
+#   docker compose -f infra/docker-compose.yml --profile app up -d --build  # + 3×ingestion, 3×scoring, 2×alerts, NGINX on :8080
+#   docker compose -f infra/docker-compose.yml --profile tools up -d       # + Kafka UI on :8090
 name: fraud-platform
 
 services:
@@ -72,6 +74,62 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+
+  # ---- Application (profile "app") -------------------------------------------------------------
+  # Replicated services have no container_name/ports: NGINX reaches them via Docker DNS.
+
+  ingestion-service:
+    profiles: ["app"]
+    build: { context: .., dockerfile: infra/docker/service.Dockerfile, args: { MODULE: ingestion-service } }
+    deploy: { replicas: 3 }
+    environment:
+      <<: &app-env
+        KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+        REDIS_HOST: redis
+        DB_URL: jdbc:postgresql://postgres:5432/fraud
+        DB_PASSWORD: ${POSTGRES_PASSWORD:-fraud-local-only}
+      SERVER_PORT: "8081"
+    healthcheck: &readiness
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${SERVER_PORT}/actuator/health/readiness || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+    depends_on: &infra
+      kafka: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+
+  scoring-service:
+    profiles: ["app"]
+    build: { context: .., dockerfile: infra/docker/service.Dockerfile, args: { MODULE: scoring-service } }
+    deploy: { replicas: 3 }     # 3 instances × 3 listener threads = 9 consumers ≤ 12 partitions
+    environment:
+      <<: *app-env
+      SERVER_PORT: "8082"
+    healthcheck: *readiness
+    depends_on: *infra
+
+  alert-service:
+    profiles: ["app"]
+    build: { context: .., dockerfile: infra/docker/service.Dockerfile, args: { MODULE: alert-service } }
+    deploy: { replicas: 2 }
+    environment:
+      <<: *app-env
+      SERVER_PORT: "8083"
+    healthcheck: *readiness
+    depends_on: *infra
+
+  gateway:
+    profiles: ["app"]
+    build: { context: .., dockerfile: infra/nginx/Dockerfile }
+    container_name: fraud-gateway
+    ports:
+      - "8080:80"
+    depends_on:
+      ingestion-service: { condition: service_healthy }
+      scoring-service: { condition: service_healthy }
+      alert-service: { condition: service_healthy }
 
 volumes:
   pgdata:

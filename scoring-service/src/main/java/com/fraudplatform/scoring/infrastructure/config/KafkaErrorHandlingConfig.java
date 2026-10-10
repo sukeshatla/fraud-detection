@@ -5,7 +5,10 @@ import com.fraudplatform.scoring.application.InvalidEventException;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import com.fraudplatform.scoring.infrastructure.kafka.LoggingRebalanceListener;
+import org.springframework.kafka.config.ContainerCustomizer;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
 import org.springframework.kafka.listener.CommonErrorHandler;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
@@ -27,6 +30,12 @@ import java.time.Duration;
 class KafkaErrorHandlingConfig {
 
     static final String DLT = Topics.TRANSACTIONS_RECEIVED + ".DLT";
+
+    /** Applied by Spring Boot to the listener container factory: log every partition movement. */
+    @Bean
+    ContainerCustomizer<String, String, ConcurrentMessageListenerContainer<String, String>> rebalanceLogging() {
+        return container -> container.getContainerProperties().setConsumerRebalanceListener(new LoggingRebalanceListener());
+    }
 
     @Bean
     CommonErrorHandler kafkaErrorHandler(KafkaTemplate<String, String> template) {
