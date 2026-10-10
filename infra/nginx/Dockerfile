@@ -1,5 +1,5 @@
 # Gateway image: NGINX serving the built dashboard and load-balancing the APIs.
-FROM node:24-alpine AS dashboard
+FROM node:25-alpine AS dashboard
 WORKDIR /dashboard
 COPY dashboard/package.json dashboard/package-lock.json ./
 RUN npm ci --no-audit --no-fund
