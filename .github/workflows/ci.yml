@@ -40,7 +40,7 @@ jobs:
               - '**/src/test/resources/**'
               - '.mvn/**'
               - 'config/**'
-              - '.github/workflows/ci.yml'
+              - '.github/workflows/**'
             dashboard:
               - 'dashboard/**'
               - '.github/workflows/ci.yml'
@@ -112,6 +112,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
+      - name: actionlint (workflow files; a YAML slip otherwise fails silently)
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo mirror.gcr.io/rhysd/actionlint:1.7.8 -color \
+            -ignore 'SC2086'   # deliberate word splitting over space-separated image lists
       - name: promtool check
         run: |
           docker run --rm -v "$PWD/infra/prometheus:/etc/prometheus" --entrypoint promtool \

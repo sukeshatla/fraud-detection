@@ -53,7 +53,7 @@ jobs:
           done
           docker build -q -f infra/nginx/Dockerfile -t fraud/gateway:ci .
 
-      - name: Scan images (Trivy): fail on fixable HIGH/CRITICAL
+      - name: "Scan images (Trivy): fail on fixable HIGH/CRITICAL"
         run: |
           for img in $IMAGES; do
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock mirror.gcr.io/aquasec/trivy:0.67.2 \
