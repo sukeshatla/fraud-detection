@@ -3,7 +3,7 @@
 # Expects the jar to be built first (./mvnw -DskipTests package). Building outside Docker keeps the
 # Maven cache warm and the image build to a few seconds.
 
-FROM eclipse-temurin:21-jre AS layers
+FROM eclipse-temurin:21-jre-noble AS layers
 ARG MODULE
 WORKDIR /build
 COPY ${MODULE}/target/${MODULE}-*.jar app.jar
@@ -11,7 +11,8 @@ COPY ${MODULE}/target/${MODULE}-*.jar app.jar
 # a code change re-pushes ~100 KB instead of ~100 MB.
 RUN java -Djarmode=tools -jar app.jar extract --layers --launcher --destination extracted
 
-FROM eclipse-temurin:21-jre
+# Pinned distro (noble): the floating 21-jre tag shipped an extra binary with known CVEs.
+FROM eclipse-temurin:21-jre-noble
 # Fixed numeric UID: Kubernetes runAsNonRoot can only verify a NUMERIC user is not root.
 RUN groupadd --system --gid 10001 app && useradd --system --uid 10001 --gid app app
 WORKDIR /app

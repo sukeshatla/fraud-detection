@@ -137,6 +137,31 @@ class AccountRiskServiceTest {
     }
 
     @Test
+    @DisplayName("AC-005-04: double-check after acquiring the loader lock: a value filled meanwhile is NOT reloaded")
+    void doubleCheckAfterAcquiringLock() {
+        CountingSource source = new CountingSource(Optional.of(FLAG));
+        // Interleaving found by DistributedSingleFlightIT: our first cache read misses, then another
+        // instance fills the cache AND releases the lock before we try to take it.
+        HighRiskAccountCache racing = new FakeHighRiskAccountCache() {
+            private int reads;
+
+            @Override
+            public Optional<RiskStatus> get(String accountId) {
+                if (reads++ == 0) {
+                    super.put(new RiskStatus.Flagged(FLAG)); // the other pod finishes right after our miss
+                    return Optional.empty();
+                }
+                return super.get(accountId);
+            }
+        };
+        AccountRiskService service = new AccountRiskService(racing, source, Clock.fixed(NOW, ZoneOffset.UTC),
+                Duration.ofMillis(300), Duration.ofMillis(10));
+
+        assertThat(service.riskOf("acc-1").isHighRisk()).isTrue();
+        assertThat(source.loads).as("must not hit the database again").hasValue(0);
+    }
+
+    @Test
     @DisplayName("AC-005-05: clearing updates the source of truth FIRST, then evicts")
     void clearUpdatesSourceThenEvicts() {
         HighRiskAccountSource source = mock(HighRiskAccountSource.class);

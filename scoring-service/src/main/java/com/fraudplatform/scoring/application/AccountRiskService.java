@@ -76,6 +76,12 @@ public class AccountRiskService {
         Optional<String> token = cache.tryAcquireLoadLock(accountId);
         if (token.isPresent()) {
             try {
+                // Double-check: another instance may have loaded, cached AND released the lock between
+                // our first cache miss and our lock acquisition (found by DistributedSingleFlightIT).
+                Optional<RiskStatus> filledMeanwhile = cache.get(accountId);
+                if (filledMeanwhile.isPresent()) {
+                    return filledMeanwhile.get();
+                }
                 return loadAndCache(accountId);
             } finally {
                 cache.releaseLoadLock(accountId, token.get());

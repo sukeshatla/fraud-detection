@@ -57,6 +57,8 @@ sequenceDiagram
 | Observability | `cache_requests_total{result=hit|miss}`, `cache_failures_total` | `countsHitsAndMisses` |
 | Fail-soft | Every Redis error → miss / empty set / no-op, plus a metric | Redis errors never fail a request |
 
+**A race the tests found.** `DistributedSingleFlightIT` failed intermittently with 2 loads instead of 1. The interleaving: pod B misses the cache; pod A finishes loading, fills the cache, **releases** the lock; pod B now acquires the free lock and loads again. The fix is the classic **double-check after acquiring the lock**: re-read the cache before loading. `AccountRiskServiceTest.doubleCheckAfterAcquiringLock` reproduces the interleaving deterministically.
+
 Why "clear in the DB first, then evict"? If you only evict, the next miss reloads from the source of truth, which still says "declined 10 minutes ago", and the account is re-flagged. Invalidation must change the **source of truth**, and the cache merely follows it.
 
 ## Redis data structures we use

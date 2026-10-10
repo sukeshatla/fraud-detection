@@ -51,6 +51,12 @@ Lessons that shaped it:
 - A local **kind rehearsal** of the delivery job caught two bugs before CI ever ran:
   1. `runAsNonRoot: true` + `USER app` → `CreateContainerConfigError`. Kubernetes can only verify a **numeric** UID is not root, so the image now uses `USER 10001`.
   2. Pods crash-looped with `REDIS_PORT=tcp://10.96…:6379`. Kubernetes injects Docker-link-style variables for every Service (`<SERVICE>_PORT`), which collided with the app's own `REDIS_PORT`. The fix is `enableServiceLinks: false`, which also stops leaking every Service address into every pod.
+- The **image scan earned its keep on the first run**. It found 9 fixable HIGH/CRITICAL CVEs in the shipped jars (Tomcat, Jackson, lz4) and 3 in a binary bundled in the floating `eclipse-temurin:21-jre` base. Fixes:
+  - patched versions declared *before* the imported Spring Boot BOM (with an imported BOM, the first declaration wins);
+  - a pinned base distro (`21-jre-noble`);
+  - `apk upgrade` in the NGINX image, because upstream images lag OS security patches.
+
+  The *filesystem* scan of the repo missed all of this, so **scan what you ship**.
 
 ## Deployment strategies
 
