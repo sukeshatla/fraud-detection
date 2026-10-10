@@ -1,0 +1,61 @@
+# Same gateway image as docker-compose, with a Kubernetes NGINX config: each upstream is a
+# Service (one stable virtual IP; kube-proxy spreads connections over ready pods).
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: gateway-nginx }
+data:
+  nginx.conf: |
+    events { worker_connections 2048; }
+    http {
+      include /etc/nginx/mime.types;
+      map $http_x_request_id $req_id { default $http_x_request_id; "" $request_id; }
+      upstream ingestion { server ingestion-service:8081 max_fails=3 fail_timeout=10s; keepalive 32; }
+      upstream alerts    { server alert-service:8083    max_fails=3 fail_timeout=10s; keepalive 16; }
+      upstream scoring   { server scoring-service:8082  max_fails=3 fail_timeout=10s; keepalive 16; }
+      server {
+        listen 8080;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header X-Request-Id $req_id;
+        add_header X-Request-Id $req_id always;
+        location = /nginx-health { return 200 "ok\n"; }
+        location /api/v1/transactions {
+          proxy_pass http://ingestion;
+          proxy_next_upstream error timeout http_502 http_503 non_idempotent;
+        }
+        location = /api/v1/alerts/stream { proxy_pass http://alerts; proxy_buffering off; proxy_read_timeout 1h; }
+        location /api/v1/alerts   { proxy_pass http://alerts; }
+        location /api/v1/accounts { proxy_pass http://scoring; }
+        location /admin/   { return 404; }
+        location /actuator { return 404; }
+        location / { root /usr/share/nginx/html; try_files $uri /index.html; }
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: gateway, labels: { app: gateway } }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: gateway } }
+  template:
+    metadata: { labels: { app: gateway } }
+    spec:
+      containers:
+        - name: nginx
+          image: fraud/gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8080 }]
+          volumeMounts:
+            - { name: config, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf }
+          readinessProbe: { httpGet: { path: /nginx-health, port: 8080 }, periodSeconds: 5 }
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+      volumes:
+        - name: config
+          configMap: { name: gateway-nginx }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: gateway }
+spec: { selector: { app: gateway }, ports: [{ port: 80, targetPort: 8080 }] }

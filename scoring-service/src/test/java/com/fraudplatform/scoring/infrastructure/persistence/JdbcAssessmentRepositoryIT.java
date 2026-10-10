@@ -37,7 +37,8 @@ class JdbcAssessmentRepositoryIT {
     @DisplayName("AC-004-02: a batch writes transaction, risk_score and rule_hit rows")
     void persistsBatch() {
         String acc = uniqueAccount();
-        RiskAssessment risky = assessment(acc, "t-1", T0, 50, List.of(new RuleHit("HIGH_AMOUNT", 30, "big"), new RuleHit("HIGH_RISK_MCC", 20, "mcc")));
+        RiskAssessment risky = assessment(acc, "t-1", T0, 50,
+                List.of(new RuleHit("HIGH_AMOUNT", 30, "big"), new RuleHit("HIGH_RISK_MCC", 20, "mcc")));
         RiskAssessment clean = assessment(acc, "t-2", T0.plusSeconds(1), 0, List.of());
 
         repository.saveAll(List.of(risky, clean), List.of());

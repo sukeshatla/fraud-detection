@@ -24,7 +24,8 @@ public class ModelLoader {
             JsonNode root = mapper.readTree(in);
             LogisticRegressionModel model = new LogisticRegressionModel(
                     root.required("modelVersion").asString(),
-                    mapper.convertValue(root.required("features"), mapper.getTypeFactory().constructCollectionType(List.class, String.class)),
+                    mapper.convertValue(root.required("features"),
+                            mapper.getTypeFactory().constructCollectionType(List.class, String.class)),
                     doubles(root.required("means")),
                     doubles(root.required("stds")),
                     doubles(root.required("weights")),

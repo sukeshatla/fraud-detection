@@ -36,7 +36,7 @@ class FraudAlertListenerTest {
     @Test
     @DisplayName("AC-007-01: FraudAlertEvent → NewAlert (id = alertEventId, severity derived, ML fields kept)")
     void mapsEvent() {
-        new FraudAlertListener(service, JsonMapper.builder().build()).onAlert(new org.apache.kafka.clients.consumer.ConsumerRecord<>("t", 0, 0, "acc-1", EVENT));
+        new FraudAlertListener(service, JsonMapper.builder().build()).onAlert(record(EVENT));
 
         ArgumentCaptor<NewAlert> captor = ArgumentCaptor.forClass(NewAlert.class);
         verify(service).ingest(captor.capture());
@@ -52,8 +52,12 @@ class FraudAlertListenerTest {
     @Test
     @DisplayName("Malformed payload → InvalidEventException (non-retryable → DLT)")
     void rejectsGarbage() {
-        assertThatThrownBy(() -> new FraudAlertListener(service, JsonMapper.builder().build()).onAlert(new org.apache.kafka.clients.consumer.ConsumerRecord<>("t", 0, 0, "acc-1", "nope")))
+        assertThatThrownBy(() -> new FraudAlertListener(service, JsonMapper.builder().build()).onAlert(record("nope")))
                 .isInstanceOf(InvalidEventException.class);
         verifyNoInteractions(service);
+    }
+
+    private static org.apache.kafka.clients.consumer.ConsumerRecord<String, String> record(String value) {
+        return new org.apache.kafka.clients.consumer.ConsumerRecord<>("fraud.alerts.v1", 0, 0, "acc-1", value);
     }
 }

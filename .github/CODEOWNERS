@@ -1,0 +1,8 @@
+# Reviews are requested automatically from the owners of the paths a PR touches.
+# (Single-maintainer project today; the structure shows how ownership would split in a team.)
+*                         @sukeshatla
+/common/                  @sukeshatla   # event contracts: breaking changes need a new topic version
+/platform-messaging/      @sukeshatla
+/k8s/                     @sukeshatla
+/.github/workflows/       @sukeshatla
+/docs/adr/                @sukeshatla

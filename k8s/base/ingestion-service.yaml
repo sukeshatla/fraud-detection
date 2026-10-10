@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: ingestion-service, labels: { app: ingestion-service } }
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5               # what "kubectl rollout undo" rolls back to
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }   # never below desired capacity during a deploy
+  selector: { matchLabels: { app: ingestion-service } }
+  template:
+    metadata:
+      labels: { app: ingestion-service }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8081"
+    spec:
+      terminationGracePeriodSeconds: 30   # > spring.lifecycle.timeout-per-shutdown-phase (20 s)
+      # Kubernetes would otherwise inject Docker-link-style env vars for every Service, e.g.
+      # REDIS_PORT=tcp://10.96.x.x:6379 for the "redis" Service, colliding with our REDIS_PORT.
+      enableServiceLinks: false
+      securityContext: { runAsNonRoot: true }
+      containers:
+        - name: app
+          image: fraud/ingestion-service:latest       # overridden per environment by kustomize "images"
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8081 }]
+          envFrom: [{ configMapRef: { name: fraud-platform } }]
+          env:
+            - { name: SERVER_PORT, value: "8081" }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: fraud-db, key: password } }
+          startupProbe:                   # generous: JVM + Flyway + Kafka connect
+            httpGet: { path: /actuator/health/liveness, port: 8081 }
+            periodSeconds: 5
+            failureThreshold: 36
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8081 }
+            periodSeconds: 10
+          readinessProbe:                 # flips to 503 on shutdown → removed from Service endpoints first
+            httpGet: { path: /actuator/health/readiness, port: 8081 }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { memory: 1Gi }       # heap = 75% of this (MaxRAMPercentage in the image)
+---
+apiVersion: v1
+kind: Service
+metadata: { name: ingestion-service }
+spec: { selector: { app: ingestion-service }, ports: [{ port: 8081 }] }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: ingestion-service }
+spec:
+  minAvailable: 1                         # node drains never take the last replica down
+  selector: { matchLabels: { app: ingestion-service } }

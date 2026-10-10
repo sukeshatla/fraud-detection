@@ -42,7 +42,8 @@ class ObservabilityIT {
         ConsumerRecord<String, String> record = KafkaTestConsumer
                 .awaitRecords(kafka.getBootstrapServers(), Topics.TRANSACTIONS_RECEIVED, account, 1).getFirst();
         assertThat(header(record, EventHeaders.REQUEST_ID)).isEqualTo("rid-obs-1");
-        assertThat(header(record, EventHeaders.TRACEPARENT)).matches("00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}"); // version-traceId-spanId-flags
+        // W3C: version-traceId-spanId-flags
+        assertThat(header(record, EventHeaders.TRACEPARENT)).matches("00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}");
     }
 
     @Test

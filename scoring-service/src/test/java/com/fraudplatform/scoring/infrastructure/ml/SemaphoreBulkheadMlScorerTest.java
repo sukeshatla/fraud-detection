@@ -70,7 +70,7 @@ class SemaphoreBulkheadMlScorerTest {
 
         assertThat(probe.highWaterMark.get()).isLessThanOrEqualTo(4);
         assertThat(scored).isGreaterThanOrEqualTo(4);
-        assertThat(fallbacks).isEqualTo(100 - scored).isPositive();
+        assertThat(fallbacks).isEqualTo((double) (100 - scored)).isPositive();
     }
 
     @Test

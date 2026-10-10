@@ -1,0 +1,23 @@
+# AC-014-04: dependency updates arrive as small, reviewable PRs, grouped to limit noise.
+version: 2
+updates:
+  - package-ecosystem: maven
+    directory: /
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    groups:
+      spring: { patterns: ["org.springframework*", "io.micrometer*", "io.opentelemetry*"] }
+      testing: { patterns: ["org.testcontainers*", "org.junit*", "org.assertj*", "org.mockito*", "com.tngtech.archunit*"] }
+  - package-ecosystem: npm
+    directory: /dashboard
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    groups:
+      react: { patterns: ["react", "react-dom", "@types/react*"] }
+      tooling: { patterns: ["vite", "vitest", "eslint*", "typescript*", "@vitejs/*", "prettier"] }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directories: ["/infra/docker", "/infra/nginx"]
+    schedule: { interval: weekly }

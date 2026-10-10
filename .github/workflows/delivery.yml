@@ -1,0 +1,107 @@
+name: Delivery
+
+# Build once → SBOM → image scan → deploy to an ephemeral Kubernetes cluster (kind) → post-deploy
+# smoke test → automatic rollback on failure (AC-014-05, 07). Runs on pull requests that can affect
+# the deployment (so a broken deploy is caught BEFORE merge) and on main, where the verified images
+# are also published to GHCR, tagged with the commit SHA.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths: ['k8s/**', 'infra/docker/**', 'infra/nginx/**', '**/pom.xml', '**/src/main/**', 'dashboard/**', '.github/workflows/delivery.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: delivery-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io/${{ github.repository_owner }}
+  IMAGES: ingestion-service scoring-service alert-service gateway
+
+jobs:
+  build-deploy-verify:
+    name: Build · scan · deploy to kind · smoke · rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with: { distribution: temurin, java-version: '21', cache: maven }
+
+      - name: Use a Docker Hub mirror (shared runner IPs hit Docker Hub's anonymous limit)
+        run: |
+          echo '{"registry-mirrors":["https://mirror.gcr.io"]}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+
+      - name: Build jars + CycloneDX SBOM
+        run: ./mvnw -B -ntp -DskipTests -Dcheckstyle.skip=true package org.cyclonedx:cyclonedx-maven-plugin:2.9.3:makeAggregateBom
+
+      - uses: actions/upload-artifact@v7
+        with: { name: sbom, path: target/bom.json }
+
+      - name: Build images (one artifact, promoted unchanged)
+        run: |
+          for svc in ingestion-service scoring-service alert-service; do
+            docker build -q -f infra/docker/service.Dockerfile --build-arg MODULE=$svc -t fraud/$svc:ci .
+          done
+          docker build -q -f infra/nginx/Dockerfile -t fraud/gateway:ci .
+
+      - name: "Scan images (Trivy): fail on fixable HIGH/CRITICAL"
+        run: |
+          for img in $IMAGES; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock mirror.gcr.io/aquasec/trivy:0.67.2 \
+              image --quiet --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 fraud/$img:ci
+          done
+
+      - uses: helm/kind-action@v1
+        with: { cluster_name: fraud }
+
+      - name: Load images into the cluster
+        run: for img in $IMAGES; do kind load docker-image fraud/$img:ci --name fraud; done
+
+      - name: Deploy (kustomize CI overlay)
+        run: |
+          kubectl apply -k k8s/overlays/ci
+          kubectl -n fraud rollout status statefulset/kafka --timeout=5m
+          kubectl -n fraud rollout status statefulset/postgres --timeout=5m
+          for d in redis ingestion-service scoring-service alert-service gateway; do
+            kubectl -n fraud rollout status deployment/$d --timeout=8m
+          done
+
+      - name: Post-deploy smoke test through the gateway
+        id: smoke
+        run: |
+          kubectl -n fraud port-forward svc/gateway 8080:80 >/dev/null 2>&1 &
+          sleep 3
+          k8s/smoke.sh http://localhost:8080
+
+      - name: Roll back on failure
+        if: failure() && steps.smoke.outcome == 'failure'
+        run: |
+          for d in ingestion-service scoring-service alert-service gateway; do
+            kubectl -n fraud rollout undo deployment/$d || true
+          done
+          kubectl -n fraud get pods
+
+      - name: Diagnostics
+        if: failure()
+        run: |
+          kubectl -n fraud get pods -o wide
+          kubectl -n fraud describe pods | tail -80
+          for app in ingestion-service scoring-service alert-service; do kubectl -n fraud logs -l app=$app --tail=60 || true; done
+
+      - name: Publish images to GHCR (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          for img in $IMAGES; do
+            docker tag fraud/$img:ci $REGISTRY/fraud-$img:${{ github.sha }}
+            docker push $REGISTRY/fraud-$img:${{ github.sha }}
+          done

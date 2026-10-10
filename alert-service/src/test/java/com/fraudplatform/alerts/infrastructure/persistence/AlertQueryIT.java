@@ -56,14 +56,14 @@ class AlertQueryIT {
     void naiveMappingIsNPlusOne() {
         stats.clear();
 
-        int pageSize = tx.execute(status -> {
+        int[] pageSizeAndHits = tx.execute(status -> {
             List<AlertEntity> page = jpa.findByStatusAndSeverityOrderByCreatedAtDescIdDesc(
                     AlertStatus.OPEN, Severity.HIGH, PageRequest.of(0, 50));
-            page.forEach(a -> a.getRuleHits().size()); // each touch = one more SELECT
-            return page.size();
+            int hits = page.stream().mapToInt(a -> a.getRuleHits().size()).sum(); // each touch = one more SELECT
+            return new int[] {page.size(), hits};
         });
 
-        assertThat(pageSize).isEqualTo(50);
+        assertThat(pageSizeAndHits).containsExactly(50, 100);
         assertThat(stats.getPrepareStatementCount()).isEqualTo(1 + 50);
     }
 

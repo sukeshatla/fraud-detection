@@ -25,6 +25,8 @@ class TransactionFeederTest {
         assertThat(rows).allSatisfy(r -> assertThat(r).containsKeys("transactionId", "accountId", "amount", "mcc", "country"));
 
         int firstVelocity = rows.indexOf(rows.stream().filter(r -> r.get("kind").equals("velocity")).findFirst().orElseThrow());
-        assertThat(rows.subList(firstVelocity, firstVelocity + 8)).extracting(r -> r.get("accountId")).containsOnly(rows.get(firstVelocity).get("accountId"));
+        assertThat(rows.subList(firstVelocity, firstVelocity + 8))
+                .extracting(r -> r.get("accountId"))
+                .containsOnly(rows.get(firstVelocity).get("accountId"));
     }
 }
