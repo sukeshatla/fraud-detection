@@ -45,7 +45,8 @@ class KafkaTransactionPublisherTest {
 
     @BeforeEach
     void setUp() {
-        publisher = new KafkaTransactionPublisher(template, mapper, TOPIC, Duration.ofMillis(100));
+        publisher = new KafkaTransactionPublisher(template, mapper, TOPIC, Duration.ofMillis(100),
+                new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
     }
 
     @Test

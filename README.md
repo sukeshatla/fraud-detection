@@ -42,7 +42,7 @@ flowchart LR
 | Load balancing | [11](docs/concepts/11-load-balancing.md) | ✅ 011 |
 | Idempotency & exactly-once | [12](docs/concepts/12-idempotency-and-exactly-once.md) | ✅ 002 · 003 · 004 · 010 |
 | Resilience: retries, DLT, circuit breaker, outbox | [13](docs/concepts/13-resilience-patterns.md) | ✅ 010 |
-| Observability | [14](docs/concepts/14-observability.md) | 012 |
+| Observability | [14](docs/concepts/14-observability.md) | ✅ 012 |
 | ML in production: feature parity, blending, degradation | [15](docs/concepts/15-ml-in-production.md) | ✅ 006 |
 
 ## How this repo is built
@@ -72,7 +72,7 @@ flowchart LR
 | 009 | Concurrency deep dive | ✅ |
 | 010 | Resilience | ✅ |
 | 011 | Load balancing | ✅ |
-| 012 | Observability | 📝 |
+| 012 | Observability | ✅ |
 | 013 | Gatling load tests | 📝 |
 | 014 | CI/CD pipeline | 📝 |
 | 015 | Security | 📝 |
@@ -91,7 +91,8 @@ Details and dependency graph: [specs/README.md](specs/README.md)
 docker compose -f infra/docker-compose.yml up -d
 
 # 2b. …or the whole load-balanced platform: 3×ingestion, 3×scoring, 2×alerts behind NGINX
-#     (dashboard + APIs on http://localhost:8080), with an end-to-end smoke test
+#     (dashboard + APIs on http://localhost:8080) plus Grafana :3000, Prometheus :9090,
+#     Jaeger :16686, with an end-to-end smoke test
 infra/smoke-test.sh
 
 # 3. Run the services (separate terminals)

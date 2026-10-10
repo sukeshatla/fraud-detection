@@ -6,3 +6,7 @@ fraud:
         it-limited:            # used by IngestionEdgeIT to exercise 429s
           capacity: 2
           refill-per-second: 0.001
+management:
+  tracing:
+    sampling:
+      probability: 1.0   # trace every request in tests so traceparent is always present

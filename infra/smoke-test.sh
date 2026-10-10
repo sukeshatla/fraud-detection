@@ -44,6 +44,27 @@ curl -s "$GATEWAY/api/v1/accounts/$ACCOUNT/transactions?limit=3" | head -c 300; 
 echo "▶ requests per ingestion instance (NGINX least_conn)"
 docker logs fraud-gateway 2>/dev/null | grep 'POST /api/v1/transactions' | grep -o 'upstream=[0-9.:]*' | sort | uniq -c
 
+echo "▶ observability: every replica scraped by Prometheus"
+sleep 6
+for job in ingestion-service scoring-service alert-service; do
+  up=$(curl -s "http://localhost:9090/api/v1/query" --data-urlencode "query=sum(up{job=\"$job\"})" \
+       | sed -nE 's/.*,"([0-9]+)"\]\}.*/\1/p')
+  echo "  $job: ${up:-0} instance(s) up"
+  [[ "${up:-0}" -ge 2 ]] || { echo "✗ expected ≥2 scraped instances of $job"; exit 1; }
+done
+
+echo "▶ observability: traces in Jaeger"
+for attempt in $(seq 1 20); do
+  services=$(curl -s http://localhost:16686/api/services)
+  if echo "$services" | grep -q ingestion-service && echo "$services" | grep -q alert-service; then
+    echo "  $services"
+    break
+  fi
+  [[ $attempt == 20 ]] && { echo "✗ traces did not reach Jaeger: $services"; exit 1; }
+  sleep 2
+done
+echo "  Grafana: http://localhost:3000 · Prometheus: http://localhost:9090 · Jaeger: http://localhost:16686"
+
 if [[ "${1:-}" == "--down" ]]; then
   $COMPOSE down
 fi

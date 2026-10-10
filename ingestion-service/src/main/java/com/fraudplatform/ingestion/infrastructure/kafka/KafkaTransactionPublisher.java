@@ -11,7 +11,10 @@ import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.slf4j.MDC;
 import org.springframework.kafka.core.KafkaTemplate;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -36,13 +39,17 @@ public class KafkaTransactionPublisher implements TransactionPublisher {
     private final JsonMapper mapper;
     private final String topic;
     private final Duration timeout;
+    private final Counter ingested;
 
     public KafkaTransactionPublisher(
-            KafkaTemplate<String, String> template, JsonMapper mapper, String topic, Duration timeout) {
+            KafkaTemplate<String, String> template, JsonMapper mapper, String topic, Duration timeout, MeterRegistry meters) {
         this.template = template;
         this.mapper = mapper;
         this.topic = topic;
         this.timeout = timeout;
+        this.ingested = Counter.builder("transactions_ingested_total")
+                .description("Transactions durably accepted (broker-acknowledged)")
+                .register(meters);
     }
 
     @Override
@@ -53,9 +60,15 @@ public class KafkaTransactionPublisher implements TransactionPublisher {
         record.headers()
                 .add(EventHeaders.EVENT_TYPE, bytes(TransactionReceivedEvent.EVENT_TYPE))
                 .add(EventHeaders.SCHEMA_VERSION, bytes(String.valueOf(TransactionReceivedEvent.SCHEMA_VERSION)));
+        String requestId = MDC.get("requestId");
+        if (requestId != null) {
+            record.headers().add(EventHeaders.REQUEST_ID, bytes(requestId)); // correlation across services
+        }
+        // traceparent is added by the KafkaTemplate's observation (spring.kafka.template.observation-enabled)
 
         try {
             template.send(record).get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            ingested.increment();
         } catch (TimeoutException e) {
             throw new EventPublishingException("Kafka did not acknowledge within " + timeout, e);
         } catch (ExecutionException e) {

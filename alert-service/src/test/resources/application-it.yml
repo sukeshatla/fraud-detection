@@ -6,3 +6,7 @@ spring:
 logging:
   level:
     org.hibernate.engine.internal.StatisticalLoggingSessionEventListener: WARN
+management:
+  tracing:
+    sampling:
+      probability: 1.0

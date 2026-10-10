@@ -17,7 +17,7 @@ Each note explains a concept, shows where this codebase uses it, lists the pitfa
 | 11 | [Load balancing](11-load-balancing.md) | NGINX, consumer groups | ✅ F011 |
 | 12 | [Idempotency & exactly-once](12-idempotency-and-exactly-once.md) | every hop | ✅ F002 · F003 · F004 · F010 |
 | 13 | [Resilience patterns](13-resilience-patterns.md) | timeouts, retries, DLT replay, breaker, outbox | ✅ F010 |
-| 14 | [Observability](14-observability.md) | metrics, logs, traces | 🟡 health probes |
+| 14 | [Observability](14-observability.md) | metrics, logs, traces, alerts | ✅ F012 |
 | 15 | [ML in production](15-ml-in-production.md) | feature parity, blending, bulkhead | ✅ F006 |
 
 Also see: [Architecture](../architecture/README.md) · [ADRs](../adr/README.md) · [Constitution](../constitution.md)

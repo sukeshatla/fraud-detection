@@ -6,6 +6,7 @@ import com.fraudplatform.messaging.outbox.OutboxMessage;
 import com.fraudplatform.scoring.domain.RiskAssessment;
 import com.fraudplatform.scoring.domain.Transaction;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import tools.jackson.databind.json.JsonMapper;
@@ -26,9 +27,10 @@ public class FraudAlertEvents {
 
     public OutboxMessage toOutbox(RiskAssessment assessment) {
         FraudAlertEvent event = toEvent(assessment);
-        return new OutboxMessage(topic, event.accountId(), mapper.writeValueAsString(event), Map.of(
-                EventHeaders.EVENT_TYPE, FraudAlertEvent.EVENT_TYPE,
-                EventHeaders.SCHEMA_VERSION, String.valueOf(FraudAlertEvent.SCHEMA_VERSION)));
+        Map<String, String> headers = new HashMap<>(assessment.transaction().metadata()); // trace context, request id
+        headers.put(EventHeaders.EVENT_TYPE, FraudAlertEvent.EVENT_TYPE);
+        headers.put(EventHeaders.SCHEMA_VERSION, String.valueOf(FraudAlertEvent.SCHEMA_VERSION));
+        return new OutboxMessage(topic, event.accountId(), mapper.writeValueAsString(event), headers);
     }
 
     static FraudAlertEvent toEvent(RiskAssessment a) {

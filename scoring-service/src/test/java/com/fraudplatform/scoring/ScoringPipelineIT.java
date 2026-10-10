@@ -39,6 +39,9 @@ class ScoringPipelineIT {
     @Autowired
     private AccountRiskService riskApi;
 
+    @Autowired
+    private io.micrometer.core.instrument.MeterRegistry meters;
+
     @Test
     @DisplayName("AC-003-03/10: 6 transactions in a minute → VELOCITY alert on fraud.alerts.v1")
     void velocityBurstRaisesAlert() throws Exception {
@@ -84,6 +87,9 @@ class ScoringPipelineIT {
         assertThat(new String(dead.headers().lastHeader("kafka_dlt-original-topic").value(), StandardCharsets.UTF_8))
                 .isEqualTo(Topics.TRANSACTIONS_RECEIVED);
         assertThat(alertsFor(account, 1)).hasSize(1); // the valid record behind the pill was still scored
+        assertThat(meters.get("kafka_dead_letters_total").tag("topic", Topics.TRANSACTIONS_RECEIVED).counter().count())
+                .isPositive(); // AC-012-06: alertable
+
     }
 
     @Test

@@ -1,0 +1,49 @@
+# Alerting rules (AC-012-06). Thresholds are starting points, to be tuned against real traffic.
+groups:
+  - name: fraud-platform
+    rules:
+      - alert: ScoringConsumerLagHigh
+        expr: sum(kafka_consumer_fetch_manager_records_lag_max{application="scoring-service"}) > 10000
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: Scoring is falling behind ingestion (lag {{ $value }} records)
+          runbook: Scale scoring-service (≤ partition count) or check Redis/PostgreSQL latency.
+
+      - alert: IngestionP99LatencyHigh
+        expr: |
+          histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{
+            application="ingestion-service", uri="/api/v1/transactions"}[5m]))) > 0.1
+        for: 5m
+        labels: { severity: page }
+        annotations:
+          summary: p99 ingestion latency {{ $value }}s exceeds the 100 ms SLO
+
+      - alert: DeadLettersProduced
+        expr: increase(kafka_dead_letters_total[5m]) > 0
+        labels: { severity: ticket }
+        annotations:
+          summary: Records were dead-lettered on {{ $labels.topic }}
+          runbook: Inspect the DLT, fix the cause, then POST /admin/dlt/replay.
+
+      - alert: OutboxRelayFailing
+        expr: increase(outbox_relay_failures_total[5m]) > 3
+        labels: { severity: page }
+        annotations:
+          summary: Outbox relay of {{ $labels.application }} keeps failing; alerts/resolutions are delayed (not lost)
+
+      - alert: MlFallbackRateHigh
+        expr: sum(rate(ml_fallback_total[5m])) / sum(rate(transactions_scored_total[5m])) > 0.05
+        for: 10m
+        labels: { severity: ticket }
+        annotations:
+          summary: More than 5% of transactions are scored rules-only (circuit open or bulkhead full)
+
+      - alert: FalsePositiveRatioHigh
+        expr: |
+          sum(increase(alert_resolutions_total{resolution="FALSE_POSITIVE"}[1h]))
+            / sum(increase(alert_resolutions_total[1h])) > 0.8
+        for: 1h
+        labels: { severity: ticket }
+        annotations:
+          summary: Over 80% of resolved alerts are false positives; review rule thresholds / model

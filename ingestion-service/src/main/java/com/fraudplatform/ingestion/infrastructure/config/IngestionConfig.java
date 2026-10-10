@@ -9,7 +9,9 @@ import com.fraudplatform.ingestion.infrastructure.kafka.KafkaTransactionPublishe
 import com.fraudplatform.ingestion.infrastructure.redis.RedisIdempotencyStore;
 import com.fraudplatform.ingestion.infrastructure.redis.RedisTokenBucketRateLimiter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.observation.ObservationPredicate;
 import java.time.Clock;
+import org.springframework.http.server.observation.ServerRequestObservationContext;
 import java.util.UUID;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.context.annotation.Bean;
@@ -28,10 +30,17 @@ class IngestionConfig {
         return Clock.systemUTC();
     }
 
+    /** Don't trace health checks / scrapes: every few seconds per replica, they'd drown real traces. */
+    @Bean
+    ObservationPredicate skipActuatorObservations() {
+        return (name, context) -> !(context instanceof ServerRequestObservationContext server
+                && server.getCarrier().getRequestURI().startsWith("/actuator"));
+    }
+
     @Bean
     TransactionPublisher transactionPublisher(
-            KafkaTemplate<String, String> template, JsonMapper mapper, IngestionProperties props) {
-        return new KafkaTransactionPublisher(template, mapper, props.topic(), props.publishTimeout());
+            KafkaTemplate<String, String> template, JsonMapper mapper, IngestionProperties props, MeterRegistry meters) {
+        return new KafkaTransactionPublisher(template, mapper, props.topic(), props.publishTimeout(), meters);
     }
 
     @Bean

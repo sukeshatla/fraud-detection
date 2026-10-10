@@ -2,3 +2,7 @@ spring:
   kafka:
     listener:
       concurrency: 2
+management:
+  tracing:
+    sampling:
+      probability: 1.0

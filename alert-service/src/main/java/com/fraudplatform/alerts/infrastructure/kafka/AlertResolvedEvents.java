@@ -6,7 +6,9 @@ import com.fraudplatform.contracts.Topics;
 import com.fraudplatform.contracts.events.AlertResolvedEvent;
 import com.fraudplatform.messaging.outbox.OutboxMessage;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Supplier;
 import java.util.UUID;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -14,9 +16,11 @@ import tools.jackson.databind.json.JsonMapper;
 public class AlertResolvedEvents {
 
     private final JsonMapper mapper;
+    private final Supplier<Map<String, String>> propagation;
 
-    public AlertResolvedEvents(JsonMapper mapper) {
+    public AlertResolvedEvents(JsonMapper mapper, Supplier<Map<String, String>> propagation) {
         this.mapper = mapper;
+        this.propagation = propagation;
     }
 
     public OutboxMessage toOutbox(AlertResolution r) {
@@ -24,8 +28,9 @@ public class AlertResolvedEvents {
                 // deterministic: one id per alert + resolution, so consumers can dedupe re-sends
                 UUID.nameUUIDFromBytes(("resolved:" + r.alertId() + ":" + r.resolution()).getBytes(StandardCharsets.UTF_8)),
                 r.alertId(), r.transactionId(), r.accountId(), r.resolution().name(), r.resolvedBy(), r.resolvedAt());
-        return new OutboxMessage(Topics.ALERT_RESOLUTIONS, r.accountId(), mapper.writeValueAsString(event), Map.of(
-                EventHeaders.EVENT_TYPE, AlertResolvedEvent.EVENT_TYPE,
-                EventHeaders.SCHEMA_VERSION, String.valueOf(AlertResolvedEvent.SCHEMA_VERSION)));
+        Map<String, String> headers = new HashMap<>(propagation.get()); // trace context + request id of the PATCH
+        headers.put(EventHeaders.EVENT_TYPE, AlertResolvedEvent.EVENT_TYPE);
+        headers.put(EventHeaders.SCHEMA_VERSION, String.valueOf(AlertResolvedEvent.SCHEMA_VERSION));
+        return new OutboxMessage(Topics.ALERT_RESOLUTIONS, r.accountId(), mapper.writeValueAsString(event), headers);
     }
 }

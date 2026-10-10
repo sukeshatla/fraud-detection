@@ -9,6 +9,7 @@ import com.fraudplatform.scoring.domain.RuleEngine;
 import com.fraudplatform.scoring.domain.Transaction;
 import com.fraudplatform.scoring.domain.ml.ScoreBlender;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -58,6 +59,7 @@ public class ScoreTransactionService {
     private final HighRiskAccountCache riskCache;
     private final MlScorer mlScorer;
     private final ScoreBlender blender;
+    private final ScoringMetrics metrics;
     private final Clock clock;
     private final int maxConcurrentAccounts;
 
@@ -69,6 +71,7 @@ public class ScoreTransactionService {
             HighRiskAccountCache riskCache,
             MlScorer mlScorer,
             ScoreBlender blender,
+            ScoringMetrics metrics,
             Clock clock,
             int maxConcurrentAccounts) {
         this.processed = processed;
@@ -78,6 +81,7 @@ public class ScoreTransactionService {
         this.riskCache = riskCache;
         this.mlScorer = mlScorer;
         this.blender = blender;
+        this.metrics = metrics;
         this.clock = clock;
         this.maxConcurrentAccounts = maxConcurrentAccounts;
     }
@@ -88,6 +92,7 @@ public class ScoreTransactionService {
         if (fresh.isEmpty()) {
             return List.of();
         }
+        long started = System.nanoTime();
 
         Map<String, List<Transaction>> byAccount = fresh.stream()
                 .collect(Collectors.groupingBy(Transaction::accountId, LinkedHashMap::new, Collectors.toList()));
@@ -111,6 +116,8 @@ public class ScoreTransactionService {
                 .filter(a -> a.decision() == Decision.DECLINE)
                 .forEach(a -> riskCache.put(new RiskStatus.Flagged(toHighRisk(a))));
         fresh.forEach(tx -> processed.markProcessed(tx.eventId()));
+        metrics.assessed(assessments);
+        metrics.batchProcessed(fresh.size(), Duration.ofNanos(System.nanoTime() - started));
         return assessments;
     }
 
