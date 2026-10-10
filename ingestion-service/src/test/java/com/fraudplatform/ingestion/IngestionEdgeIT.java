@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fraudplatform.contracts.Topics;
 import com.fraudplatform.testing.KafkaTestConsumer;
+import com.fraudplatform.testing.TestJwts;
 import com.fraudplatform.ingestion.support.IntegrationTest;
 import com.fraudplatform.ingestion.support.TransactionJson;
 import java.time.Duration;
@@ -75,7 +76,7 @@ class IngestionEdgeIT {
     private MvcTestResult post(String body, String idempotencyKey, String clientId) {
         var request = mvc.post().uri("/api/v1/transactions")
                 .contentType(MediaType.APPLICATION_JSON)
-                .header("X-Client-Id", clientId)
+                .header("Authorization", TestJwts.bearer(TestJwts.client(clientId, "INGEST"))) // quota identity = azp
                 .content(body);
         if (idempotencyKey != null) {
             request = request.header("Idempotency-Key", idempotencyKey);

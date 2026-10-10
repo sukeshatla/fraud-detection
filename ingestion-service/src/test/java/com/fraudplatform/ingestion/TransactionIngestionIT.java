@@ -6,6 +6,7 @@ import com.fraudplatform.contracts.EventHeaders;
 import com.fraudplatform.contracts.Topics;
 import com.fraudplatform.contracts.events.TransactionReceivedEvent;
 import com.fraudplatform.testing.KafkaTestConsumer;
+import com.fraudplatform.testing.TestJwts;
 import com.fraudplatform.ingestion.support.IntegrationTest;
 import com.fraudplatform.ingestion.support.TransactionJson;
 import java.nio.charset.StandardCharsets;
@@ -80,6 +81,7 @@ class TransactionIngestionIT {
 
     private MvcTestResult submit(String accountId, String transactionId) {
         return mvc.post().uri("/api/v1/transactions")
+                .header("Authorization", TestJwts.bearer(TestJwts.client("gw-it", "INGEST")))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(TransactionJson.valid(transactionId, accountId))
                 .exchange();

@@ -6,6 +6,14 @@ spring:
   threads:
     virtual:
       enabled: true          # Tomcat request handling on virtual threads (ADR-0004)
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Tokens are issued by Keycloak behind the gateway (one public issuer for browsers and machines);
+          # signing keys are fetched over the internal network.
+          issuer-uri: ${OIDC_ISSUER:http://localhost:8080/realms/fraud}
+          jwk-set-uri: ${OIDC_JWKS_URI:http://localhost:8180/realms/fraud/protocol/openid-connect/certs}
   data:
     redis:
       host: ${REDIS_HOST:localhost}

@@ -39,6 +39,15 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- Security (Feature 015): OAuth2 resource server validating Keycloak JWTs -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fraudplatform</groupId>
+            <artifactId>platform-security</artifactId>
+        </dependency>
         <!-- Observability (Feature 012): Prometheus metrics, OpenTelemetry tracing via Micrometer -->
         <dependency>
             <groupId>io.micrometer</groupId>
@@ -71,6 +80,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Boot 4 modular test slices: security auto-config for @WebMvcTest + spring-security-test -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

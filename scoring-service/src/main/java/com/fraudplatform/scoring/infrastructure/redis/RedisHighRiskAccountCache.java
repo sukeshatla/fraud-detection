@@ -3,6 +3,7 @@ package com.fraudplatform.scoring.infrastructure.redis;
 import com.fraudplatform.scoring.application.HighRiskAccountCache;
 import com.fraudplatform.scoring.domain.HighRiskAccount;
 import com.fraudplatform.scoring.domain.RiskStatus;
+import com.fraudplatform.security.Pii;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.nio.charset.StandardCharsets;
@@ -131,7 +132,8 @@ public class RedisHighRiskAccountCache implements HighRiskAccountCache {
             redis.delete(key(accountId));
         } catch (RuntimeException e) {
             // Stale "flagged" entries are bounded by the TTL; log loudly so it is noticed.
-            log.error("Failed to evict risk cache entry for {}; it will expire within {}", accountId, flaggedTtl, e);
+            log.error("Failed to evict risk cache entry for {}; it will expire within {}",
+                    Pii.maskAccount(accountId), flaggedTtl, e);
             failures.increment();
         }
     }

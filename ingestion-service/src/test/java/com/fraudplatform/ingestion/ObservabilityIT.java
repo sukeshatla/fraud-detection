@@ -7,6 +7,7 @@ import com.fraudplatform.contracts.Topics;
 import com.fraudplatform.ingestion.support.IntegrationTest;
 import com.fraudplatform.ingestion.support.TransactionJson;
 import com.fraudplatform.testing.KafkaTestConsumer;
+import com.fraudplatform.testing.TestJwts;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -35,6 +36,7 @@ class ObservabilityIT {
         String account = "acc-" + UUID.randomUUID().toString().substring(0, 8);
 
         MvcTestResult result = mvc.post().uri("/api/v1/transactions").header("X-Request-Id", "rid-obs-1")
+                .header("Authorization", TestJwts.bearer(TestJwts.client("gw-it", "INGEST")))
                 .contentType(MediaType.APPLICATION_JSON).content(TransactionJson.valid("txn-" + UUID.randomUUID(), account))
                 .exchange();
 
@@ -50,6 +52,7 @@ class ObservabilityIT {
     @DisplayName("AC-012-01/02: /actuator/prometheus exposes RED histograms and the business counters")
     void prometheusScrape() throws Exception {
         mvc.post().uri("/api/v1/transactions").contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", TestJwts.bearer(TestJwts.client("gw-it", "INGEST")))
                 .content(TransactionJson.valid("txn-" + UUID.randomUUID(), "acc-metrics")).exchange();
 
         MvcTestResult scrape = mvc.get().uri("/actuator/prometheus").exchange();
