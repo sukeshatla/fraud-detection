@@ -1,0 +1,182 @@
+{
+  "realm": "fraud",
+  "enabled": true,
+  "accessTokenLifespan": 300,
+  "sslRequired": "external",
+  "roles": {
+    "realm": [
+      {
+        "name": "INGEST",
+        "description": "Machine: submit transactions"
+      },
+      {
+        "name": "ANALYST",
+        "description": "Read the alert queue and account data; start/release reviews"
+      },
+      {
+        "name": "SUPERVISOR",
+        "description": "Resolve alerts (confirm fraud / false positive); clear account risk"
+      },
+      {
+        "name": "OPS",
+        "description": "Operator endpoints: DLT replay, actuator"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "payment-gateway",
+      "name": "Payment gateway (machine-to-machine)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "dev-only-not-a-secret-gateway",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "ops-automation",
+      "name": "Smoke tests / monitoring",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "dev-only-not-a-secret-ops",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false
+    },
+    {
+      "clientId": "gw-premium",
+      "name": "Load tests: premium-tier gateway (1000 rps quota)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "dev-only-not-a-secret-load",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "attributes": {
+        "access.token.lifespan": "3600"
+      }
+    },
+    {
+      "clientId": "gw-standard",
+      "name": "Load tests: standard-tier gateway (default quota)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "dev-only-not-a-secret-load",
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "attributes": {
+        "access.token.lifespan": "3600"
+      }
+    },
+    {
+      "clientId": "fraud-dashboard",
+      "name": "Analyst dashboard (browser)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-payment-gateway",
+      "enabled": true,
+      "serviceAccountClientId": "payment-gateway",
+      "realmRoles": [
+        "INGEST"
+      ]
+    },
+    {
+      "username": "service-account-ops-automation",
+      "enabled": true,
+      "serviceAccountClientId": "ops-automation",
+      "realmRoles": [
+        "ANALYST",
+        "OPS"
+      ]
+    },
+    {
+      "username": "service-account-gw-premium",
+      "enabled": true,
+      "serviceAccountClientId": "gw-premium",
+      "realmRoles": [
+        "INGEST"
+      ]
+    },
+    {
+      "username": "service-account-gw-standard",
+      "enabled": true,
+      "serviceAccountClientId": "gw-standard",
+      "realmRoles": [
+        "INGEST"
+      ]
+    },
+    {
+      "username": "analyst",
+      "enabled": true,
+      "firstName": "Ada",
+      "lastName": "Analyst",
+      "email": "analyst@example.com",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "analyst",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "ANALYST"
+      ]
+    },
+    {
+      "username": "supervisor",
+      "enabled": true,
+      "firstName": "Sam",
+      "lastName": "Supervisor",
+      "email": "supervisor@example.com",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "supervisor",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "ANALYST",
+        "SUPERVISOR"
+      ]
+    },
+    {
+      "username": "ops",
+      "enabled": true,
+      "firstName": "Olu",
+      "lastName": "Ops",
+      "email": "ops@example.com",
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "ops",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "OPS"
+      ]
+    }
+  ]
+}

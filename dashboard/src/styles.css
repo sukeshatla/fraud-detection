@@ -51,6 +51,7 @@ h3 {
   margin: 1.25rem 0 0.5rem;
 }
 .top {
+  position: relative;
   padding: 1rem 1.25rem;
   background: var(--panel);
   border-bottom: 1px solid var(--line);
@@ -250,4 +251,22 @@ td {
   .layout {
     grid-template-columns: 1fr;
   }
+}
+
+.user {
+  position: absolute;
+  top: 1rem;
+  right: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+.user .roles {
+  color: var(--muted);
+}
+.hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0.25rem 0 0;
 }

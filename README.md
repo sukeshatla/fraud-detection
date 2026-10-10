@@ -75,7 +75,7 @@ flowchart LR
 | 012 | Observability | ✅ |
 | 013 | Gatling load tests | ✅ |
 | 014 | CI/CD pipeline | ✅ |
-| 015 | Security | 📝 |
+| 015 | Security | ✅ |
 
 Details and dependency graph: [specs/README.md](specs/README.md)
 
@@ -100,13 +100,19 @@ infra/smoke-test.sh
 ./mvnw -pl scoring-service spring-boot:run
 ./mvnw -pl alert-service spring-boot:run
 
-# 3b. Run the dashboard (http://localhost:5173)
+# 3b. Run the dashboard on http://localhost:8080 (the dev server stands in for the gateway);
+#     sign in as analyst/analyst or supervisor/supervisor
 (cd dashboard && npm install && npm run dev)
 
 # 4. Submit a transaction
+#    Every API needs an OAuth2 token (Feature 015). Get one as the "payment-gateway" client from
+#    Keycloak (dev-only secret; users and clients are listed in infra/keycloak/README.md):
+TOKEN=$(curl -s -d grant_type=client_credentials -d client_id=payment-gateway \
+  -d client_secret=dev-only-not-a-secret-gateway \
+  localhost:8180/realms/fraud/protocol/openid-connect/token | sed -E 's/.*"access_token":"([^"]+)".*/\1/')
 curl -i -X POST localhost:8081/api/v1/transactions \
   -H 'Content-Type: application/json' \
-  -H 'X-Client-Id: gw-1' \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Idempotency-Key: $(uuidgen)" \
   -d '{
         "transactionId": "txn-0001",
@@ -137,6 +143,7 @@ docker compose -f infra/docker-compose.yml --profile tools up -d kafka-ui
 ```
 ├── common/                 Shared Kafka event contracts (records only)
 ├── platform-messaging/      Shared infra: transactional outbox, jittered backoff, DLT replay (010)
+├── platform-security/       Shared infra: Keycloak JWT role mapping, SSE token resolver, PII masking (015)
 ├── test-support/           Shared Testcontainers images + Kafka/Redis test helpers
 ├── ingestion-service/      REST → Kafka, rate limiting, idempotency (001, 002)
 │   └── src/main/java/…/ingestion/

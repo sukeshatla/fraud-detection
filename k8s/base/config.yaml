@@ -6,3 +6,5 @@ data:
   REDIS_HOST: redis
   DB_URL: jdbc:postgresql://postgres:5432/fraud
   LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+  OIDC_ISSUER: http://localhost:8080/realms/fraud
+  OIDC_JWKS_URI: http://keycloak:8080/realms/fraud/protocol/openid-connect/certs

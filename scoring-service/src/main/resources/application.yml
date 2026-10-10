@@ -23,6 +23,12 @@ spring:
   flyway:
     schemas: scoring                # created if missing; migrations in db/migration
     default-schema: scoring
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OIDC_ISSUER:http://localhost:8080/realms/fraud}
+          jwk-set-uri: ${OIDC_JWKS_URI:http://localhost:8180/realms/fraud/protocol/openid-connect/certs}
   data:
     redis:
       host: ${REDIS_HOST:localhost}

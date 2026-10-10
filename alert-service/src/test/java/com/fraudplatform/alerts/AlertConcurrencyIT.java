@@ -8,6 +8,7 @@ import com.fraudplatform.alerts.application.AlertRepository;
 import com.fraudplatform.alerts.application.ReviewAlertService;
 import com.fraudplatform.alerts.application.StaleAlertException;
 import com.fraudplatform.alerts.domain.AlertStatus;
+import com.fraudplatform.testing.TestJwts;
 import com.fraudplatform.alerts.support.IntegrationTest;
 import java.time.Clock;
 import java.time.Instant;
@@ -56,7 +57,7 @@ class AlertConcurrencyIT {
         UUID id = newOpenAlert();
 
         List<Integer> statuses = race(50, () -> mvc.patch().uri("/api/v1/alerts/" + id)
-                .header("X-Actor", "analyst-" + Thread.currentThread().threadId())
+                .header("Authorization", TestJwts.bearer(TestJwts.user("analyst-" + Thread.currentThread().threadId(), "ANALYST")))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"status\":\"UNDER_REVIEW\",\"version\":0}")
                 .exchange().getResponse().getStatus());

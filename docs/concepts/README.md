@@ -19,5 +19,6 @@ Each note explains a concept, shows where this codebase uses it, lists the pitfa
 | 13 | [Resilience patterns](13-resilience-patterns.md) | timeouts, retries, DLT replay, breaker, outbox | ✅ F010 |
 | 14 | [Observability](14-observability.md) | metrics, logs, traces, alerts | ✅ F012 |
 | 15 | [ML in production](15-ml-in-production.md) | feature parity, blending, bulkhead | ✅ F006 |
+| 16 | [API security: OAuth2, JWT, RBAC](16-api-security-oauth2-jwt.md) | every API, dashboard login, PII in logs | ✅ F015 |
 
 Also see: [Architecture](../architecture/README.md) · [ADRs](../adr/README.md) · [Constitution](../constitution.md)

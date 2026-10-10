@@ -17,11 +17,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -77,10 +78,19 @@ class AlertController {
         return queries.details(id);
     }
 
-    /** {@code X-Actor} identifies the analyst until Feature 015 derives it from the JWT. */
+    /**
+     * The actor is the authenticated user (from the token, never from a client-supplied header), so the
+     * audit trail can't be forged. Closing an alert (a terminal status) requires the SUPERVISOR role.
+     */
     @PatchMapping("/{id}")
-    AlertView review(@PathVariable UUID id, @Valid @RequestBody ReviewRequest request,
-            @RequestHeader(name = "X-Actor", defaultValue = "anonymous") String actor) {
-        return reviews.review(id, request.status(), request.version(), actor);
+    AlertView review(@PathVariable UUID id, @Valid @RequestBody ReviewRequest request, Authentication user) {
+        if (request.status().isTerminal() && !hasRole(user, "ROLE_SUPERVISOR")) {
+            throw new AccessDeniedException("Closing an alert requires the SUPERVISOR role");
+        }
+        return reviews.review(id, request.status(), request.version(), user.getName());
+    }
+
+    private static boolean hasRole(Authentication user, String role) {
+        return user.getAuthorities().stream().anyMatch(authority -> role.equals(authority.getAuthority()));
     }
 }

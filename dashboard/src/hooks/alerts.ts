@@ -57,7 +57,7 @@ export function useReviewAlert(id: string) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: ({ status, version }: { status: AlertStatus; version: number }) =>
-      reviewAlert(id, status, version, 'analyst'), // Feature 015: actor from the login token
+      reviewAlert(id, status, version),
     onSuccess: (updated) => {
       client.setQueryData<AlertDetails>(alertKeys.details(id), (old) =>
         old ? { ...old, alert: updated } : old,

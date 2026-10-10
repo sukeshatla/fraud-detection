@@ -2,6 +2,7 @@ package com.fraudplatform.alerts;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fraudplatform.testing.TestJwts;
 import com.fraudplatform.alerts.support.IntegrationTest;
 import com.fraudplatform.contracts.Topics;
 import com.fraudplatform.contracts.events.FraudAlertEvent;
@@ -49,7 +50,8 @@ class AlertStreamIT {
     void streamsCreatedAndUpdated() throws Exception {
         HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + env.getProperty("local.server.port")
-                + "/api/v1/alerts/stream")).header("Accept", "text/event-stream").build();
+                + "/api/v1/alerts/stream?access_token=" + TestJwts.user("analyst-1", "ANALYST")))
+                .header("Accept", "text/event-stream").build();
         HttpResponse<java.io.InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
         assertThat(response.headers().firstValue("Content-Type")).hasValueSatisfying(v -> assertThat(v).startsWith("text/event-stream"));
         BufferedReader lines = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8));
@@ -58,10 +60,24 @@ class AlertStreamIT {
         kafkaTemplate.send(Topics.FRAUD_ALERTS, event.accountId(), mapper.writeValueAsString(event)).get();
         assertThat(nextEvent(lines, "alert.created", event.transactionId())).contains(event.alertEventId().toString());
 
-        assertThat(mvc.patch().uri("/api/v1/alerts/" + event.alertEventId()).contentType(MediaType.APPLICATION_JSON)
+        assertThat(mvc.patch().uri("/api/v1/alerts/" + event.alertEventId())
+                .header("Authorization", TestJwts.bearer(TestJwts.user("analyst-1", "ANALYST"))).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"status\":\"UNDER_REVIEW\",\"version\":0}").exchange()).hasStatus(HttpStatus.OK);
         assertThat(nextEvent(lines, "alert.updated", event.transactionId())).contains("UNDER_REVIEW");
         response.body().close();
+    }
+
+    @Test
+    @DisplayName("AC-015-02: the query-string token is accepted ONLY on the stream; no token → 401")
+    void queryTokenOnlyOnStream() throws Exception {
+        HttpClient client = HttpClient.newHttpClient();
+        String base = "http://localhost:" + env.getProperty("local.server.port");
+        String token = TestJwts.user("analyst-1", "ANALYST");
+
+        assertThat(client.send(HttpRequest.newBuilder(URI.create(base + "/api/v1/alerts/stream")).build(),
+                HttpResponse.BodyHandlers.discarding()).statusCode()).isEqualTo(401);
+        assertThat(client.send(HttpRequest.newBuilder(URI.create(base + "/api/v1/alerts?access_token=" + token)).build(),
+                HttpResponse.BodyHandlers.discarding()).statusCode()).isEqualTo(401);
     }
 
     /** Reads SSE lines until an event named {@code name} whose data mentions {@code marker}; returns its data. */

@@ -4,6 +4,7 @@
 #   docker compose -f infra/docker-compose.yml --profile app up -d --build  # + 3×ingestion, 3×scoring, 2×alerts, NGINX on :8080
 #     …plus Grafana :3000, Prometheus :9090, Jaeger :16686
 #   docker compose -f infra/docker-compose.yml --profile tools up -d       # + Kafka UI on :8090
+# Keycloak (always on): realm "fraud", users analyst/supervisor/ops — see infra/keycloak/README.md
 name: fraud-platform
 
 services:
@@ -63,6 +64,33 @@ services:
       timeout: 3s
       retries: 10
 
+  # Identity provider (Feature 015). Tokens always carry iss=http://localhost:8080/realms/fraud
+  # (browsers reach Keycloak through the gateway); services fetch keys from keycloak:8080 directly.
+  # Admin console: http://localhost:8180 (admin / admin — local only).
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.2
+    container_name: fraud-keycloak
+    command: ["start-dev", "--import-realm"]
+    ports:
+      - "8180:8080"
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: http://localhost:8080
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"   # internal callers use the URL they called
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./keycloak/fraud-realm.json:/opt/keycloak/data/import/fraud-realm.json:ro
+    healthcheck:
+      # The image has no curl: speak HTTP over bash's /dev/tcp to the management port.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
   kafka-ui:
     image: ghcr.io/kafbat/kafka-ui:latest
     container_name: fraud-kafka-ui
@@ -93,6 +121,9 @@ services:
         MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
         TRACING_SAMPLING_PROBABILITY: "1.0"
         LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+        # Security (Feature 015): validate tokens issued for the public URL with keys fetched internally
+        OIDC_ISSUER: http://localhost:8080/realms/fraud
+        OIDC_JWKS_URI: http://keycloak:8080/realms/fraud/protocol/openid-connect/certs
       SERVER_PORT: "8081"
     healthcheck: &readiness
       test: ["CMD-SHELL", "curl -fsS http://localhost:$${SERVER_PORT}/actuator/health/readiness || exit 1"]
@@ -104,6 +135,7 @@ services:
       kafka: { condition: service_healthy }
       redis: { condition: service_healthy }
       postgres: { condition: service_healthy }
+      keycloak: { condition: service_healthy }
 
   scoring-service:
     profiles: ["app"]

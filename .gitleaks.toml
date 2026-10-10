@@ -9,6 +9,7 @@ regexes = [
   '''fraud-local-only''',
   '''ci-only-not-a-secret''',
   '''dev-only-not-a-secret[A-Za-z0-9-]*''',
+  '''test-only-hmac-key-never-used-outside-tests[0-9]*''',
 ]
 paths = [
   '''dashboard/package-lock\.json''',

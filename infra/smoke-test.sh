@@ -16,12 +16,19 @@ echo "▶ building jars"
 echo "▶ starting the platform (waits for healthchecks)"
 $COMPOSE up -d --build --wait --wait-timeout 300
 
+# OAuth2 client-credentials token from Keycloak, via the gateway (dev-only secrets, see infra/keycloak).
+token() {
+  curl -fsS -d grant_type=client_credentials -d "client_id=$1" -d "client_secret=$2" \
+    "$GATEWAY/realms/fraud/protocol/openid-connect/token" | sed -E 's/.*"access_token":"([^"]+)".*/\1/'
+}
+INGEST_TOKEN=$(token payment-gateway dev-only-not-a-secret-gateway)
+READ_TOKEN=$(token ops-automation dev-only-not-a-secret-ops)
 ACCOUNT="acc-smoke-$RANDOM$RANDOM"
 NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 echo "▶ sending a velocity burst for $ACCOUNT through the gateway"
 for i in $(seq 1 8); do
   code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$GATEWAY/api/v1/transactions" \
-    -H 'Content-Type: application/json' -H 'X-Client-Id: smoke' -H "Idempotency-Key: $ACCOUNT-$i" \
+    -H 'Content-Type: application/json' -H "Authorization: Bearer $INGEST_TOKEN" -H "Idempotency-Key: $ACCOUNT-$i" \
     -d "{\"transactionId\":\"$ACCOUNT-$i\",\"accountId\":\"$ACCOUNT\",\"amount\":25.00,\"currency\":\"USD\",
          \"merchantId\":\"m-1\",\"merchantCategoryCode\":\"5411\",\"country\":\"US\",\"channel\":\"CARD_NOT_PRESENT\",
          \"occurredAt\":\"$NOW\"}")
@@ -30,7 +37,7 @@ done
 
 echo "▶ waiting for the alert to reach the analyst queue"
 for attempt in $(seq 1 30); do
-  if curl -s "$GATEWAY/api/v1/alerts/feed?status=OPEN&size=100" | grep -q "\"accountId\":\"$ACCOUNT\""; then
+  if curl -s -H "Authorization: Bearer $READ_TOKEN" "$GATEWAY/api/v1/alerts/feed?status=OPEN&size=100" | grep -q "\"accountId\":\"$ACCOUNT\""; then
     echo "✓ alert raised for $ACCOUNT"
     break
   fi
@@ -39,7 +46,12 @@ for attempt in $(seq 1 30); do
 done
 
 echo "▶ account history via the gateway (scoring-service)"
-curl -s "$GATEWAY/api/v1/accounts/$ACCOUNT/transactions?limit=3" | head -c 300; echo
+curl -s -H "Authorization: Bearer $READ_TOKEN" "$GATEWAY/api/v1/accounts/$ACCOUNT/transactions?limit=3" | head -c 300; echo
+
+echo "▶ security: no token → 401, wrong role → 403"
+[[ $(curl -s -o /dev/null -w '%{http_code}' "$GATEWAY/api/v1/alerts") == "401" ]] || { echo "✗ expected 401"; exit 1; }
+[[ $(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $INGEST_TOKEN" "$GATEWAY/api/v1/alerts") == "403" ]] \
+  || { echo "✗ expected 403"; exit 1; }
 
 echo "▶ requests per ingestion instance (NGINX least_conn)"
 docker logs fraud-gateway 2>/dev/null | grep 'POST /api/v1/transactions' | grep -o 'upstream=[0-9.:]*' | sort | uniq -c

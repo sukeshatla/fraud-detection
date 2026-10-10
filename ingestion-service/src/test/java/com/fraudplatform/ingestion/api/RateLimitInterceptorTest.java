@@ -3,8 +3,8 @@ package com.fraudplatform.ingestion.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 
 import com.fraudplatform.ingestion.application.IngestTransactionService;
 import com.fraudplatform.ingestion.application.IngestionReceipt;
@@ -16,7 +16,10 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.fraudplatform.ingestion.infrastructure.security.SecurityConfig;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -24,6 +27,7 @@ import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
 
 @WebMvcTest(TransactionController.class)
+@Import(SecurityConfig.class)
 class RateLimitInterceptorTest {
 
     @Autowired
@@ -34,6 +38,9 @@ class RateLimitInterceptorTest {
 
     @MockitoBean
     private RateLimiter rateLimiter;
+
+    @MockitoBean // jwt() supplies the authentication; real JWT decoding is covered by the ITs
+    private org.springframework.security.oauth2.jwt.JwtDecoder jwtDecoder;
 
     @Test
     @DisplayName("AC-002-01: empty bucket → 429 problem+json with Retry-After and RateLimit-* headers")
@@ -64,21 +71,9 @@ class RateLimitInterceptorTest {
         assertThat(result).hasHeader("RateLimit-Remaining", "42");
     }
 
-    @Test
-    @DisplayName("Missing X-Client-Id falls into the shared 'anonymous' bucket")
-    void anonymousBucketWhenNoClientId() {
-        given(rateLimiter.tryAcquire("anonymous")).willReturn(RateLimitDecision.rejected(10, Duration.ofSeconds(1)));
-
-        MvcTestResult result = mvc.post().uri("/api/v1/transactions")
-                .contentType(MediaType.APPLICATION_JSON).content("{}").exchange();
-
-        assertThat(result).hasStatus(HttpStatus.TOO_MANY_REQUESTS);
-        verify(rateLimiter).tryAcquire("anonymous");
-    }
-
     private MvcTestResult submit(String clientId) {
         return mvc.post().uri("/api/v1/transactions")
-                .header("X-Client-Id", clientId)
+                .with(jwt().jwt(j -> j.claim("azp", clientId)).authorities(new SimpleGrantedAuthority("ROLE_INGEST")))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"transactionId":"txn-1","accountId":"acc-1","amount":10.00,"currency":"USD",

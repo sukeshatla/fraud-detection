@@ -124,6 +124,8 @@ jobs:
         run: |
           kubectl kustomize k8s/overlays/ci > /dev/null
           kubectl kustomize k8s/base > /dev/null
+      - name: Keycloak realm copies are identical (compose ↔ kustomize)
+        run: cmp infra/keycloak/fraud-realm.json k8s/base/keycloak/fraud-realm.json
       - name: docker compose config
         run: docker compose -f infra/docker-compose.yml --profile app config --quiet
 

@@ -1,0 +1,47 @@
+# Identity provider for local/CI clusters: Keycloak in dev mode with the "fraud" realm imported
+# from a ConfigMap. Production would run Keycloak (or a managed IdP) separately with a database,
+# TLS and real secrets; the services only need OIDC_ISSUER and OIDC_JWKS_URI.
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: keycloak, labels: { app: keycloak } }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: keycloak } }
+  template:
+    metadata: { labels: { app: keycloak } }
+    spec:
+      enableServiceLinks: false
+      securityContext: { runAsNonRoot: true, runAsUser: 1000 }
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.4.2
+          args: ["start-dev", "--import-realm"]
+          ports: [{ containerPort: 8080 }, { containerPort: 9000, name: management }]
+          env:
+            - { name: KC_BOOTSTRAP_ADMIN_USERNAME, value: admin }
+            - { name: KC_BOOTSTRAP_ADMIN_PASSWORD, value: admin }   # dev mode only
+            - { name: KC_HOSTNAME, value: "http://localhost:8080" }  # the gateway, as seen by clients
+            - { name: KC_HOSTNAME_BACKCHANNEL_DYNAMIC, value: "true" }
+            - { name: KC_PROXY_HEADERS, value: xforwarded }
+            - { name: KC_HTTP_ENABLED, value: "true" }
+            - { name: KC_HEALTH_ENABLED, value: "true" }
+          volumeMounts:
+            - { name: realm, mountPath: /opt/keycloak/data/import, readOnly: true }
+          startupProbe:
+            httpGet: { path: /health/started, port: 9000 }
+            periodSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet: { path: /health/ready, port: 9000 }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { memory: 1Gi }
+      volumes:
+        - name: realm
+          configMap: { name: keycloak-realm }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: keycloak }
+spec: { selector: { app: keycloak }, ports: [{ port: 8080 }] }

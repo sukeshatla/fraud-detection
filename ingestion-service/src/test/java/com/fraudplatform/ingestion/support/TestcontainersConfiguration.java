@@ -1,6 +1,8 @@
 package com.fraudplatform.ingestion.support;
 
 import com.fraudplatform.testing.Containers;
+import com.fraudplatform.testing.TestJwts;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
@@ -18,6 +20,12 @@ public class TestcontainersConfiguration {
     @ServiceConnection
     KafkaContainer kafkaContainer() {
         return Containers.kafka();
+    }
+
+    /** Replaces the JWKS-backed decoder: tests send real tokens signed by {@link TestJwts}. */
+    @Bean
+    JwtDecoder jwtDecoder() {
+        return TestJwts.decoder();
     }
 
     @Bean

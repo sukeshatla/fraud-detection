@@ -24,7 +24,7 @@ public class SpikeSimulation extends Simulation {
     static final int NORMAL_RATE = Requests.intProp("rate", 50);
 
     {
-        var spike = scenario("spike").exec(feed(new TransactionFeeder()), Requests.submitAs("submit (spike)", "gw-runaway", 202, 429))
+        var spike = scenario("spike").exec(feed(new TransactionFeeder()), Requests.submitAs("submit (spike)", "gw-standard", 202, 429))
                 .injectOpen(rampUsersPerSec(0).to(SPIKE_RATE).during(Duration.ofSeconds(10)),
                         constantUsersPerSec(SPIKE_RATE).during(Duration.ofSeconds(10)));
         var recovery = scenario("recovery").exec(feed(new TransactionFeeder()), Requests.submit("submit (recovery)"))
