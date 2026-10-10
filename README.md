@@ -37,7 +37,7 @@ flowchart LR
 | Distributed rate limiting | [06](docs/concepts/06-distributed-rate-limiting.md) | ✅ 002 |
 | JDK 21 virtual threads | [07](docs/concepts/07-virtual-threads.md) | ✅ 001 · ✅ 009 |
 | Threads, semaphores, locks, CompletableFuture | [08](docs/concepts/08-concurrency-primitives.md) | ✅ 005 · 006 · 009 |
-| Load testing with Gatling | [09](docs/concepts/09-load-testing-gatling.md) | 013 |
+| Load testing with Gatling | [09](docs/concepts/09-load-testing-gatling.md) | ✅ 013 |
 | CI/CD pipeline | [10](docs/concepts/10-ci-cd-pipeline.md) | ✅ 000 · 014 |
 | Load balancing | [11](docs/concepts/11-load-balancing.md) | ✅ 011 |
 | Idempotency & exactly-once | [12](docs/concepts/12-idempotency-and-exactly-once.md) | ✅ 002 · 003 · 004 · 010 |
@@ -73,7 +73,7 @@ flowchart LR
 | 010 | Resilience | ✅ |
 | 011 | Load balancing | ✅ |
 | 012 | Observability | ✅ |
-| 013 | Gatling load tests | 📝 |
+| 013 | Gatling load tests | ✅ |
 | 014 | CI/CD pipeline | 📝 |
 | 015 | Security | 📝 |
 
@@ -130,6 +130,7 @@ docker compose -f infra/docker-compose.yml --profile tools up -d kafka-ui
 | `./mvnw test` | Unit, slice, contract and architecture tests (no Docker) |
 | `./mvnw verify` | All of the above, plus Testcontainers integration tests and the coverage gate |
 | `cd dashboard && npm test` | Dashboard component tests (Vitest + Testing Library + MSW) |
+| `./mvnw -pl load-tests gatling:test -Dgatling.simulationClass=com.fraudplatform.load.BaselineSimulation -Drate=500` | Load test against the running stack (see [concept 09](docs/concepts/09-load-testing-gatling.md)) |
 
 ## Repository layout
 
@@ -148,6 +149,7 @@ docker compose -f infra/docker-compose.yml --profile tools up -d kafka-ui
 ├── alert-service/          Analyst queue: Kafka → JPA, keyset paging, Redis lock + @Version (007)
 ├── dashboard/              React 19 + TS analyst console: live SSE queue, review actions (008)
 ├── concurrency-lab/        Executable concurrency notes: measured, asserted examples (009)
+├── load-tests/             Gatling simulations (baseline, spike, soak, failover, smoke) (013)
 ├── infra/                  docker-compose (infra + `app` profile), NGINX gateway, Dockerfile, smoke test
 ├── docs/
 │   ├── constitution.md     engineering rules & Definition of Done
