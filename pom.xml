@@ -42,7 +42,7 @@
 
         <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.5.3</maven-surefire-plugin.version>
-        <jacoco-maven-plugin.version>0.8.13</jacoco-maven-plugin.version>
+        <jacoco-maven-plugin.version>0.8.15</jacoco-maven-plugin.version>
 
         <!-- Coverage gate (constitution §5): applies to application + domain packages -->
         <jacoco.minimum.line.coverage>0.80</jacoco.minimum.line.coverage>
