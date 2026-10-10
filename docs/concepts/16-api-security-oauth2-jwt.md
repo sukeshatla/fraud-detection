@@ -53,6 +53,12 @@ validation and fetch keys from the internal JWKS URL. If you mix these up, you g
   as few paths as possible, and keep them out of logs.
 - **Tokens in `localStorage`**: any XSS can read them. `sessionStorage` limits the exposure to a
   tab's lifetime. A backend-for-frontend with HttpOnly cookies removes it entirely.
+- **CSRF and static analysis**: CodeQL flags `csrf().disable()`. For a stateless bearer-token API
+  that's a false positive: CSRF works by making a browser attach **ambient** credentials (cookies)
+  to a forged request, and these APIs accept none. The alerts are dismissed with that reasoning.
+  Keeping CSRF on would also turn unauthenticated POSTs into 403 instead of 401, because the CSRF
+  filter runs before bearer authentication. If you ever add a cookie session (e.g. a BFF), turn
+  it back on.
 - **Hiding a button is not authorization**: the dashboard hides "Confirm fraud" from analysts,
   but the API's 403 is what enforces the rule.
 - **Machine tokens per request**: fetching a new token for every call overloads the IdP. Cache
