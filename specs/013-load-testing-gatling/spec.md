@@ -2,7 +2,7 @@
 
 | Field    | Value |
 |----------|-------|
-| Status   | Spec |
+| Status   | Implemented |
 | Depends  | 011 |
 | Concepts | [Load testing with Gatling](../../docs/concepts/09-load-testing-gatling.md) |
 

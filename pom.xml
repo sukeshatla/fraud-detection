@@ -19,6 +19,7 @@
         <module>scoring-service</module>
         <module>alert-service</module>
         <module>concurrency-lab</module>
+        <module>load-tests</module>
     </modules>
 
     <properties>
