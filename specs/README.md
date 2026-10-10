@@ -38,7 +38,7 @@ Features build on each other. Each one is a shippable vertical slice with its ow
 | 012 | [Observability](012-observability/spec.md) | Micrometer, Prometheus, Grafana, tracing, correlation IDs | ✅ Implemented |
 | 013 | [Load testing with Gatling](013-load-testing-gatling/spec.md) | Open vs closed workload models, SLO assertions | ✅ Implemented |
 | 014 | [CI/CD pipeline](014-ci-cd/spec.md) | Quality gates, container images, supply-chain scanning, release | ✅ Implemented |
-| 015 | [Security](015-security/spec.md) | OAuth2 resource server, JWT, RBAC, PII masking | 📝 Spec |
+| 015 | [Security](015-security/spec.md) | OAuth2 resource server, JWT, RBAC, PII masking | ✅ Implemented |
 
 ```mermaid
 flowchart LR

@@ -9,6 +9,7 @@ import type {
   Problem,
   TransactionHistoryEntry,
 } from './types';
+import { accessToken } from '../auth/session';
 
 /** Non-2xx response with its RFC 9457 body. */
 export class ApiError extends Error {
@@ -26,11 +27,13 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = accessToken();
   const response = await fetch(new URL(path, window.location.origin), {
     ...init,
     headers: {
       Accept: 'application/json',
       ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
   });
@@ -60,11 +63,13 @@ export const fetchAccountHistory = (accountId: string) =>
 export const fetchAccountRisk = (accountId: string) =>
   request<AccountRisk>(`/api/v1/accounts/${encodeURIComponent(accountId)}/risk`);
 
-/** Optimistic concurrency: send the version we looked at; the server answers 409 if it moved on. */
-export function reviewAlert(id: string, status: AlertStatus, version: number, actor: string): Promise<Alert> {
+/**
+ * Optimistic concurrency: send the version we looked at; the server answers 409 if it moved on.
+ * The audit actor is taken from the access token server-side, never sent by the client.
+ */
+export function reviewAlert(id: string, status: AlertStatus, version: number): Promise<Alert> {
   return request(`/api/v1/alerts/${id}`, {
     method: 'PATCH',
-    headers: { 'X-Actor': actor },
     body: JSON.stringify({ status, version }),
   });
 }

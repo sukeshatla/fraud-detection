@@ -5,7 +5,12 @@ resources:
   - namespace.yaml
   - config.yaml
   - infra.yaml
+  - keycloak.yaml
   - ingestion-service.yaml
   - scoring-service.yaml
   - alert-service.yaml
   - gateway.yaml
+configMapGenerator:
+  # Identical copy of infra/keycloak/fraud-realm.json (kustomize can't read outside its root; CI diffs them).
+  - name: keycloak-realm
+    files: [keycloak/fraud-realm.json]

@@ -1,8 +1,12 @@
 import { ApiError } from '../api/client';
+import { canClose } from '../auth/session';
+import { useSession } from '../auth/SessionContext';
 import type { AlertStatus } from '../api/types';
 import { useAccountHistory, useAccountRisk, useAlertDetails, useReviewAlert } from '../hooks/alerts';
 import { formatMoney, formatTime, statusLabel } from './format';
 import { SeverityBadge } from './SeverityBadge';
+
+const TERMINAL: readonly AlertStatus[] = ['CONFIRMED_FRAUD', 'FALSE_POSITIVE'];
 
 const ACTIONS: Record<AlertStatus, { label: string; to: AlertStatus; tone?: string }[]> = {
   OPEN: [{ label: 'Start review', to: 'UNDER_REVIEW' }],
@@ -45,6 +49,7 @@ export function AlertDetail({ alertId }: { alertId: string }) {
   const history = useAccountHistory(alert?.accountId);
   const risk = useAccountRisk(alert?.accountId);
   const review = useReviewAlert(alertId);
+  const session = useSession();
 
   if (details.isError) return <p role="alert">Could not load this alert.</p>;
   if (!alert) return <p className="empty">Loading…</p>;
@@ -76,18 +81,23 @@ export function AlertDetail({ alertId }: { alertId: string }) {
       )}
 
       <div className="actions">
-        {ACTIONS[alert.status].map((action) => (
-          <button
-            key={action.to}
-            type="button"
-            className={action.tone}
-            disabled={review.isPending}
-            onClick={() => review.mutate({ status: action.to, version: alert.version })}
-          >
-            {action.label}
-          </button>
-        ))}
+        {ACTIONS[alert.status]
+          .filter((action) => !TERMINAL.includes(action.to) || canClose(session))
+          .map((action) => (
+            <button
+              key={action.to}
+              type="button"
+              className={action.tone}
+              disabled={review.isPending}
+              onClick={() => review.mutate({ status: action.to, version: alert.version })}
+            >
+              {action.label}
+            </button>
+          ))}
       </div>
+      {alert.status === 'UNDER_REVIEW' && !canClose(session) && (
+        <p className="hint">Confirming fraud or a false positive requires the Supervisor role.</p>
+      )}
 
       <section className="scores" aria-label="Score breakdown">
         <Score label="Risk score" value={String(alert.riskScore)} />

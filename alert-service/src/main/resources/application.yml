@@ -6,6 +6,12 @@ spring:
   threads:
     virtual:
       enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${OIDC_ISSUER:http://localhost:8080/realms/fraud}
+          jwk-set-uri: ${OIDC_JWKS_URI:http://localhost:8180/realms/fraud/protocol/openid-connect/certs}
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/fraud}
     username: ${DB_USER:fraud}

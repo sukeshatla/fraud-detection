@@ -1,6 +1,10 @@
 /** Minimal EventSource stand-in (jsdom has none): tests push server events with emit(). */
 export class FakeEventSource {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
   static instances: FakeEventSource[] = [];
+  readyState = FakeEventSource.OPEN;
   private listeners = new Map<string, ((event: MessageEvent<string>) => void)[]>();
   closed = false;
 
@@ -19,6 +23,7 @@ export class FakeEventSource {
 
   close() {
     this.closed = true;
+    this.readyState = FakeEventSource.CLOSED;
   }
 
   static latest(): FakeEventSource {

@@ -11,3 +11,4 @@ We record significant decisions using [Michael Nygard's format](https://cognitec
 | 0005 | [Testing with Testcontainers, no in-memory fakes](0005-testcontainers-over-in-memory-fakes.md) | Accepted |
 | 0006 | [Monorepo with Maven multi-module](0006-monorepo-maven-multimodule.md) | Accepted |
 | 0007 | [Shared platform-messaging library](0007-platform-messaging-library.md) | Accepted |
+| 0008 | [OAuth2 resource servers with Keycloak; shared platform-security library](0008-platform-security-library.md) | Accepted |

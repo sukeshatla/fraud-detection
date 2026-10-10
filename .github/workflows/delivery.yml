@@ -9,7 +9,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    paths: ['k8s/**', 'infra/docker/**', 'infra/nginx/**', '**/pom.xml', '**/src/main/**', 'dashboard/**', '.github/workflows/delivery.yml']
+    paths: ['k8s/**', 'infra/docker/**', 'infra/nginx/**', 'infra/keycloak/**', '**/pom.xml', '**/src/main/**', 'dashboard/**', '.github/workflows/delivery.yml']
   workflow_dispatch:
 
 concurrency:
@@ -71,7 +71,7 @@ jobs:
           kubectl apply -k k8s/overlays/ci
           kubectl -n fraud rollout status statefulset/kafka --timeout=5m
           kubectl -n fraud rollout status statefulset/postgres --timeout=5m
-          for d in redis ingestion-service scoring-service alert-service gateway; do
+          for d in redis keycloak ingestion-service scoring-service alert-service gateway; do
             kubectl -n fraud rollout status deployment/$d --timeout=8m
           done
 

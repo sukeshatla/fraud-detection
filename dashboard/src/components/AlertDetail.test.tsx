@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { Alert } from '../api/types';
 import { anAlert } from '../test/fixtures';
-import { renderWithClient } from '../test/render';
+import { analyst, renderWithClient } from '../test/render';
 import { server } from '../test/server';
 import { AlertDetail } from './AlertDetail';
 
@@ -127,5 +127,27 @@ describe('AlertDetail', () => {
     renderWithClient(<AlertDetail alertId={alert.id} />);
 
     expect(await screen.findByText(/high-risk account/i)).toBeInTheDocument();
+  });
+
+  it('AC-015-03: an analyst can triage but is not offered the closing actions', async () => {
+    const alert = anAlert({ status: 'UNDER_REVIEW', version: 1 });
+    serveDetails(alert);
+
+    renderWithClient(<AlertDetail alertId={alert.id} />, analyst);
+
+    expect(await screen.findByRole('button', { name: /release/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /confirm fraud/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /false positive/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/requires the supervisor role/i)).toBeInTheDocument();
+  });
+
+  it('AC-015-03: a supervisor is offered the closing actions', async () => {
+    const alert = anAlert({ status: 'UNDER_REVIEW', version: 1 });
+    serveDetails(alert);
+
+    renderWithClient(<AlertDetail alertId={alert.id} />);
+
+    expect(await screen.findByRole('button', { name: /confirm fraud/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /false positive/i })).toBeInTheDocument();
   });
 });

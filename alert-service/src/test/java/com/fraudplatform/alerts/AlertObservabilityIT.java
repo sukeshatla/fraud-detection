@@ -4,6 +4,7 @@ import static com.fraudplatform.alerts.application.AlertFixtures.newAlert;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fraudplatform.alerts.application.AlertRepository;
+import com.fraudplatform.testing.TestJwts;
 import com.fraudplatform.alerts.support.IntegrationTest;
 import com.fraudplatform.contracts.EventHeaders;
 import com.fraudplatform.contracts.Topics;
@@ -23,6 +24,8 @@ import org.testcontainers.kafka.KafkaContainer;
 /** Feature 012 in alert-service. */
 @IntegrationTest
 class AlertObservabilityIT {
+
+    private static final String SUPERVISOR = TestJwts.bearer(TestJwts.user("supervisor-7", "ANALYST", "SUPERVISOR"));
 
     @Autowired
     private MockMvcTester mvc;
@@ -62,6 +65,7 @@ class AlertObservabilityIT {
 
     private org.springframework.test.web.servlet.assertj.MvcTestResult patch(UUID id, String status, long version, String requestId) {
         var result = mvc.patch().uri("/api/v1/alerts/" + id).header("X-Request-Id", requestId)
+                .header("Authorization", SUPERVISOR)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"%s\",\"version\":%d}".formatted(status, version))
                 .exchange();
         assertThat(result).hasStatus(HttpStatus.OK);

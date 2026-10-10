@@ -6,6 +6,7 @@ import static org.awaitility.Awaitility.await;
 import com.fraudplatform.contracts.Topics;
 import com.fraudplatform.contracts.events.AlertResolvedEvent;
 import com.fraudplatform.contracts.events.FraudAlertEvent;
+import com.fraudplatform.testing.TestJwts;
 import com.fraudplatform.alerts.support.IntegrationTest;
 import com.fraudplatform.testing.KafkaTestConsumer;
 import java.math.BigDecimal;
@@ -27,6 +28,9 @@ import tools.jackson.databind.json.JsonMapper;
 /** fraud.alerts.v1 → alert queue → review → fraud.alert-resolutions.v1 */
 @IntegrationTest
 class AlertIngestionIT {
+
+    private static final String ANALYST = TestJwts.bearer(TestJwts.user("analyst-7", "ANALYST"));
+    private static final String SUPERVISOR = TestJwts.bearer(TestJwts.user("supervisor-7", "ANALYST", "SUPERVISOR"));
 
     @Autowired
     private KafkaTemplate<String, String> kafkaTemplate;
@@ -54,7 +58,8 @@ class AlertIngestionIT {
         kafkaTemplate.send(Topics.FRAUD_ALERTS, account, json).get(); // redelivery
 
         String url = "/api/v1/alerts/" + event.alertEventId();
-        await().atMost(Duration.ofSeconds(30)).until(() -> mvc.get().uri(url).exchange().getResponse().getStatus() == 200);
+        await().atMost(Duration.ofSeconds(30))
+                .until(() -> mvc.get().uri(url).header("Authorization", ANALYST).exchange().getResponse().getStatus() == 200);
         Thread.sleep(1000); // give the duplicate time to be (not) inserted
         assertThat(jdbc.queryForObject("SELECT count(*) FROM alert WHERE transaction_id = ?", Integer.class,
                 event.transactionId())).isEqualTo(1);
@@ -67,11 +72,11 @@ class AlertIngestionIT {
                 AlertResolvedEvent.class);
         assertThat(resolved.alertId()).isEqualTo(event.alertEventId());
         assertThat(resolved.resolution()).isEqualTo("FALSE_POSITIVE");
-        assertThat(resolved.resolvedBy()).isEqualTo("analyst-7");
+        assertThat(resolved.resolvedBy()).isEqualTo("supervisor-7"); // the actor comes from the token (AC-015-03)
     }
 
     private void patch(String url, String status, long version) {
-        assertThat(mvc.patch().uri(url).header("X-Actor", "analyst-7").contentType(MediaType.APPLICATION_JSON)
+        assertThat(mvc.patch().uri(url).header("Authorization", SUPERVISOR).contentType(MediaType.APPLICATION_JSON)
                 .content("{\"status\":\"%s\",\"version\":%d}".formatted(status, version)).exchange())
                 .hasStatus(HttpStatus.OK);
     }

@@ -21,19 +21,25 @@ final class Requests {
                 .shareConnections(); // like a gateway's connection pool, not a browser per user
     }
 
+    /** Premium-tier client (1000 rps quota): the platform's capacity is measured, not the quota. */
+    static final String DEFAULT_CLIENT = System.getProperty("clientId", "gw-premium");
+
     /**
-     * POST one transaction. Client ids are spread over 50 "gateways" so per-client quotas reflect a
-     * realistic tenant mix; each request has an Idempotency-Key like a well-behaved client.
+     * POST one transaction as the default client; each request has an Idempotency-Key like a
+     * well-behaved client.
      */
     static ChainBuilder submit(String name, Integer... acceptableStatuses) {
-        return submitAs(name, null, acceptableStatuses);
+        return submitAs(name, DEFAULT_CLIENT, acceptableStatuses);
     }
 
-    /** @param clientId fixed X-Client-Id (one tenant), or null to spread over 50 gateways */
+    /**
+     * @param clientId the OAuth2 client to authenticate as; its {@code azp} claim is the
+     *                 rate-limit identity (e.g. gw-standard has the default 100 rps quota)
+     */
     static ChainBuilder submitAs(String name, String clientId, Integer... acceptableStatuses) {
         return io.gatling.javaapi.core.CoreDsl.exec(http(name)
                 .post("/api/v1/transactions")
-                .header("X-Client-Id", session -> clientId != null ? clientId : "gw-" + Math.floorMod(session.userId(), 50))
+                .header("Authorization", session -> Tokens.bearer(clientId))
                 .header("Idempotency-Key", "#{transactionId}")
                 .body(StringBody("""
                         {"transactionId":"#{transactionId}","accountId":"#{accountId}","amount":#{amount},

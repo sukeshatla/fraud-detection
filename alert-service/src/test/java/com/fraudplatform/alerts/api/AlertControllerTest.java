@@ -7,6 +7,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 
 import com.fraudplatform.alerts.application.AlertDetails;
 import com.fraudplatform.alerts.application.AlertLockedException;
@@ -26,7 +29,13 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import com.fraudplatform.alerts.infrastructure.security.SecurityConfig;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -34,6 +43,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
 
+@Import(SecurityConfig.class)
 @WebMvcTest(AlertController.class)
 class AlertControllerTest {
 
@@ -48,13 +58,16 @@ class AlertControllerTest {
     @MockitoBean
     private ReviewAlertService reviews;
 
+    @MockitoBean
+    private JwtDecoder jwtDecoder;
+
     @Test
     @DisplayName("AC-007-02: offset page with total count; filters passed through")
     void offsetPage() {
         given(queries.page(AlertStatus.OPEN, Optional.of(Severity.HIGH), 0, 50))
                 .willReturn(new OffsetPage(List.of(alert(ID, AlertStatus.OPEN, 0)), 0, 50, 1));
 
-        MvcTestResult result = mvc.get().uri("/api/v1/alerts?status=OPEN&severity=HIGH&page=0&size=50").exchange();
+        MvcTestResult result = mvc.get().uri("/api/v1/alerts?status=OPEN&severity=HIGH&page=0&size=50").with(ANALYST).exchange();
 
         assertThat(result).hasStatus(HttpStatus.OK);
         assertThat(result).bodyJson().extractingPath("$.items[0].id").isEqualTo(ID.toString());
@@ -69,7 +82,7 @@ class AlertControllerTest {
         given(queries.after(eq(AlertStatus.OPEN), eq(Optional.empty()), eq(Optional.of(cursor)), anyInt()))
                 .willReturn(new KeysetPage(List.of(alert(ID, AlertStatus.OPEN, 0)), Optional.of(cursor)));
 
-        MvcTestResult result = mvc.get().uri("/api/v1/alerts/feed?status=OPEN&after=" + cursor.encode()).exchange();
+        MvcTestResult result = mvc.get().uri("/api/v1/alerts/feed?status=OPEN&after=" + cursor.encode()).with(ANALYST).exchange();
 
         assertThat(result).hasStatus(HttpStatus.OK);
         assertThat(result).bodyJson().extractingPath("$.nextCursor").isEqualTo(cursor.encode());
@@ -77,7 +90,7 @@ class AlertControllerTest {
 
     @Test
     void invalidCursorIs400() {
-        assertThat(mvc.get().uri("/api/v1/alerts/feed?after=garbage").exchange()).hasStatus(HttpStatus.BAD_REQUEST);
+        assertThat(mvc.get().uri("/api/v1/alerts/feed?after=garbage").with(ANALYST).exchange()).hasStatus(HttpStatus.BAD_REQUEST);
     }
 
     @Test
@@ -86,7 +99,7 @@ class AlertControllerTest {
         given(queries.details(ID)).willReturn(new AlertDetails(alert(ID, AlertStatus.UNDER_REVIEW, 1),
                 List.of(new AuditEntry(AlertStatus.OPEN, AlertStatus.UNDER_REVIEW, "analyst-1", NOW))));
 
-        MvcTestResult result = mvc.get().uri("/api/v1/alerts/" + ID).exchange();
+        MvcTestResult result = mvc.get().uri("/api/v1/alerts/" + ID).with(ANALYST).exchange();
 
         assertThat(result).bodyJson().extractingPath("$.alert.status").isEqualTo("UNDER_REVIEW");
         assertThat(result).bodyJson().extractingPath("$.history[0].actor").isEqualTo("analyst-1");
@@ -97,7 +110,7 @@ class AlertControllerTest {
     void notFound() {
         given(queries.details(ID)).willThrow(new AlertNotFoundException(ID));
 
-        assertThat(mvc.get().uri("/api/v1/alerts/" + ID).exchange()).hasStatus(HttpStatus.NOT_FOUND);
+        assertThat(mvc.get().uri("/api/v1/alerts/" + ID).with(ANALYST).exchange()).hasStatus(HttpStatus.NOT_FOUND);
     }
 
     @Test
@@ -149,9 +162,47 @@ class AlertControllerTest {
         assertThat(patch("{\"status\":\"UNDER_REVIEW\"}")).hasStatus(HttpStatus.BAD_REQUEST);
     }
 
+    @Test
+    @DisplayName("AC-015-03: an ANALYST may triage but not close an alert (terminal status needs SUPERVISOR)")
+    void analystCannotClose() {
+        assertThat(patch("{\"status\":\"FALSE_POSITIVE\",\"version\":1}", ANALYST)).hasStatus(HttpStatus.FORBIDDEN);
+        verify(reviews, never()).review(any(), any(), anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("AC-015-03: the audit actor comes from the token; a forged X-Actor header is ignored")
+    void actorFromToken() {
+        given(reviews.review(ID, AlertStatus.UNDER_REVIEW, 0, "analyst-1")).willReturn(alert(ID, AlertStatus.UNDER_REVIEW, 1));
+
+        MvcTestResult result = mvc.patch().uri("/api/v1/alerts/" + ID).header("X-Actor", "someone-else").with(ANALYST)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"UNDER_REVIEW\",\"version\":0}").exchange();
+
+        assertThat(result).hasStatus(HttpStatus.OK);
+        verify(reviews).review(ID, AlertStatus.UNDER_REVIEW, 0, "analyst-1");
+    }
+
+    @Test
+    @DisplayName("AC-015-02: no token → 401; a machine token without ANALYST → 403")
+    void unauthenticatedAndWrongRole() {
+        assertThat(mvc.get().uri("/api/v1/alerts").exchange()).hasStatus(HttpStatus.UNAUTHORIZED);
+        assertThat(mvc.get().uri("/api/v1/alerts").with(user("payment-gateway", "INGEST")).exchange()).hasStatus(HttpStatus.FORBIDDEN);
+    }
+
     private MvcTestResult patch(String body) {
-        return mvc.patch().uri("/api/v1/alerts/" + ID).header("X-Actor", "analyst-1")
+        return patch(body, SUPERVISOR);
+    }
+
+    private MvcTestResult patch(String body, RequestPostProcessor as) {
+        return mvc.patch().uri("/api/v1/alerts/" + ID).with(as)
                 .contentType(MediaType.APPLICATION_JSON).content(body).exchange();
+    }
+
+    private static final RequestPostProcessor ANALYST = user("analyst-1", "ANALYST");
+    private static final RequestPostProcessor SUPERVISOR = user("analyst-1", "ANALYST", "SUPERVISOR");
+
+    private static RequestPostProcessor user(String name, String... roles) {
+        return jwt().jwt(token -> token.subject(name)).authorities(
+                java.util.Arrays.stream(roles).map(role -> (GrantedAuthority) new SimpleGrantedAuthority("ROLE_" + role)).toList());
     }
 
     private static long anyLong() {
