@@ -32,7 +32,7 @@
         <spring-boot.version>4.1.1</spring-boot.version>
         <archunit.version>1.5.1</archunit.version>
         <resilience4j.version>2.4.0</resilience4j.version>
-        <errorprone.version>2.50.0</errorprone.version>
+        <errorprone.version>2.51.0</errorprone.version>
         <!-- CVE fixes ahead of the Spring Boot BOM (see dependencyManagement) -->
         <jackson3.version>3.2.3</jackson3.version>
         <tomcat.version>11.0.26</tomcat.version>
